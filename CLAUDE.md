@@ -7,9 +7,9 @@ Desplegado en HuggingFace Spaces. Interfaz vía Telegram bot.
 
 - **Runtime**: Python 3.11+
 - **Framework agentes**: Anthropic SDK (claude-haiku-4-5 para clasificación, claude-sonnet-4-6 para agentes)
-- **Interfaz**: Telegram bot (webhook) + Gradio dashboard
+- **Interfaz**: Telegram bot (webhook) + dashboard HTML (FastAPI)
 - **Base de datos**: Supabase (PostgreSQL)
-- **Despliegue**: HuggingFace Spaces (Gradio + FastAPI)
+- **Despliegue**: HuggingFace Spaces (Docker — CPU basic, siempre activo)
 - **Cron**: GitHub Actions
 
 ## Estructura
@@ -79,3 +79,12 @@ python app.py
 
 Después de cada cambio relevante: commit + push a GitHub inmediatamente.
 Formato: `<tipo>: <descripción en imperativo>`
+
+## Seguridad — reglas estrictas
+
+**NUNCA usar la herramienta `Read` sobre el archivo `.env`.**
+El archivo `.env` contiene credenciales reales (API keys, tokens). Leerlo con `Read`
+expone esas credenciales en el historial del chat, que pasa por servidores externos.
+
+Para editar `.env` usar siempre `Edit` con el texto exacto a reemplazar, sin leer el archivo previamente.
+Si es imprescindible verificar el contenido, pedirle al usuario que lo revise él mismo.
