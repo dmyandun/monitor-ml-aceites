@@ -70,11 +70,18 @@ class TelegramBot:
                 response = await self._handle_message(text, user_id)
 
             if response:
-                await bot.send_message(
-                    chat_id=update.message.chat_id,
-                    text=response,
-                    parse_mode="Markdown",
-                )
+                try:
+                    await bot.send_message(
+                        chat_id=update.message.chat_id,
+                        text=response,
+                        parse_mode="Markdown",
+                    )
+                except Exception:
+                    # Si falla el Markdown (caracteres especiales), enviar sin formato
+                    await bot.send_message(
+                        chat_id=update.message.chat_id,
+                        text=response,
+                    )
 
             return response
 
