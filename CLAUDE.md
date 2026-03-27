@@ -1,4 +1,4 @@
-# monitor-ml-aceitess
+# monitor-ml-aceites
 
 Sistema multiagente de monitoreo ML para producción y venta de aceites comestibles.
 Desplegado en HuggingFace Spaces. Interfaz vía Telegram bot.

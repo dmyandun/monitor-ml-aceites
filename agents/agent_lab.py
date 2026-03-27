@@ -26,7 +26,7 @@ from database.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """Eres Agent Lab, el meta-agente de mejora continua del sistema monitor-ml-aceitess.
+SYSTEM_PROMPT = """Eres Agent Lab, el meta-agente de mejora continua del sistema monitor-ml-aceites.
 
 Tu misión diaria:
 1. Consultar los findings de investigación recientes (relevancia > 0.5)

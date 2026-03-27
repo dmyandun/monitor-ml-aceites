@@ -66,7 +66,7 @@ AGENT_REGISTRY: list[AgentRoute] = [
     ),
 ]
 
-ORCHESTRATOR_SYSTEM_PROMPT = """Eres el clasificador de intents del sistema monitor-ml-aceitess.
+ORCHESTRATOR_SYSTEM_PROMPT = """Eres el clasificador de intents del sistema monitor-ml-aceites.
 Tu única tarea es determinar a qué agente debe ir el mensaje del usuario.
 
 Agentes disponibles:

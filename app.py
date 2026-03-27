@@ -50,12 +50,12 @@ telegram_bot = TelegramBot(orchestrator=orchestrator, agent_map=agent_map)
 # ── FastAPI ───────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("monitor-ml-aceitess iniciado")
+    logger.info("monitor-ml-aceites iniciado")
     yield
-    logger.info("monitor-ml-aceitess detenido")
+    logger.info("monitor-ml-aceites detenido")
 
 fastapi_app = FastAPI(
-    title="monitor-ml-aceitess",
+    title="monitor-ml-aceites",
     description="Sistema multiagente de monitoreo ML para aceites comestibles",
     lifespan=lifespan,
 )
@@ -76,7 +76,7 @@ async def telegram_webhook(request: Request):
 @fastapi_app.get("/health")
 def health():
     """Endpoint de salud para UptimeRobot."""
-    return {"status": "ok", "service": "monitor-ml-aceitess"}
+    return {"status": "ok", "service": "monitor-ml-aceites"}
 
 
 # ── Gradio Dashboard ──────────────────────────────────────
@@ -192,7 +192,7 @@ def build_dashboard() -> gr.Blocks:
             # ── Tab: Info ──────────────────────────────────
             with gr.TabItem("Acerca de"):
                 gr.Markdown("""
-## monitor-ml-aceitess
+## monitor-ml-aceites
 
 Sistema multiagente basado en Claude (Anthropic) para monitoreo de modelos ML
 aplicados a la producción y venta de aceites comestibles en Ecuador.

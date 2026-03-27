@@ -1,5 +1,5 @@
 -- ============================================================
--- schema.sql — monitor-ml-aceitess
+-- schema.sql — monitor-ml-aceites
 -- Ejecutar en el SQL Editor de Supabase (una sola vez)
 -- ============================================================
 
