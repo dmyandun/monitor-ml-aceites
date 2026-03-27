@@ -17,6 +17,9 @@ import asyncio
 import argparse
 from typing import Any
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import httpx
 from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
