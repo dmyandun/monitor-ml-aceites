@@ -1,0 +1,244 @@
+"""
+demand_monitor.py
+-----------------
+Agente especialista: monitoreo del modelo de forecasting de demanda/ventas.
+
+Cubre:
+  - Volúmenes de venta (aceites, mantecas, otros productos)
+  - Inventario y stock
+  - Métricas del modelo de demanda
+  - Importación futura de datos Excel del negocio real
+
+Herramientas:
+  - get_demand_metrics         Métricas del modelo de demanda
+  - get_sales_summary          Resumen de ventas por período
+  - get_inventory_status       Estado de inventario actual
+  - import_excel_data          Importa datos planos desde Excel (futuro negocio real)
+"""
+
+import logging
+from agents.base_agent import run_agent, MODEL_SMART
+from database.supabase_client import get_supabase
+
+logger = logging.getLogger(__name__)
+
+SYSTEM_PROMPT = """Eres el agente monitor del modelo de forecasting de demanda y ventas.
+
+Tu rol:
+- Reportar el estado del modelo de predicción de demanda de productos
+- Analizar patrones de ventas por producto, canal y región
+- Alertar sobre desviaciones entre demanda prevista y real
+- Monitorear niveles de inventario y riesgo de desabasto
+- En el futuro, analizar datos reales de ventas del negocio (Excel)
+
+El negocio es una empresa ecuatoriana que produce y vende:
+  - Aceites comestibles (palma, girasol, soya, maíz)
+  - Mantecas
+  - Otros productos derivados
+
+Los datos actuales provienen del dataset FMCG Kaggle como proxy.
+En el futuro se usarán datos reales en formato Excel plano.
+
+Cuando reportes, incluye números específicos y comparaciones con períodos anteriores.
+Responde siempre en español."""
+
+TOOLS = [
+    {
+        "name": "get_demand_metrics",
+        "description": "Obtiene las métricas del modelo de forecasting de demanda (MAE, RMSE, MAPE, sesgo).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "last_n_runs": {
+                    "type": "integer",
+                    "description": "Ejecuciones recientes a consultar.",
+                    "default": 5,
+                }
+            },
+        },
+    },
+    {
+        "name": "get_sales_summary",
+        "description": "Resumen de ventas agrupado por período, producto o canal.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "period": {
+                    "type": "string",
+                    "enum": ["week", "month", "quarter"],
+                    "description": "Período de agrupación.",
+                    "default": "month",
+                },
+                "group_by": {
+                    "type": "string",
+                    "enum": ["product", "channel", "region", "none"],
+                    "description": "Dimensión de agrupación adicional.",
+                    "default": "none",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_inventory_status",
+        "description": "Estado actual del inventario por producto y nivel de riesgo de desabasto.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "import_excel_data",
+        "description": "Importa datos de ventas desde un archivo Excel plano. Usar cuando el usuario suba datos reales del negocio.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "Ruta al archivo Excel (.xlsx o .xls).",
+                },
+                "sheet_name": {
+                    "type": "string",
+                    "description": "Nombre de la hoja a importar (default: primera hoja).",
+                    "default": "Sheet1",
+                },
+            },
+            "required": ["file_path"],
+        },
+    },
+]
+
+
+def _get_demand_metrics(last_n_runs: int = 5) -> dict:
+    try:
+        db = get_supabase()
+        result = (
+            db.table("ml_model_runs")
+            .select("run_date, metrics, status, notes")
+            .eq("model_id", _get_demand_model_id())
+            .order("run_date", desc=True)
+            .limit(last_n_runs)
+            .execute()
+        )
+        if result.data:
+            return {"runs": result.data, "count": len(result.data)}
+        return {"message": "No hay ejecuciones del modelo de demanda registradas. Pendiente de entrenamiento (Fase 2)."}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _get_sales_summary(period: str = "month", group_by: str = "none") -> dict:
+    try:
+        db = get_supabase()
+        query = db.table("sales_data").select(
+            "date, product_name, product_category, quantity, total_amount, channel, region"
+        )
+
+        from datetime import datetime, timedelta
+        period_days = {"week": 7, "month": 30, "quarter": 90}
+        since = (datetime.utcnow() - timedelta(days=period_days.get(period, 30))).isoformat()
+        query = query.gte("date", since).order("date", desc=True)
+        result = query.execute()
+
+        if not result.data:
+            return {
+                "message": f"No hay datos de ventas para el período '{period}'. "
+                           "Los datos reales se cargarán en Fase 2 vía Excel o dataset Kaggle."
+            }
+
+        total_amount = sum(r.get("total_amount", 0) or 0 for r in result.data)
+        total_qty = sum(r.get("quantity", 0) or 0 for r in result.data)
+        return {
+            "period": period,
+            "group_by": group_by,
+            "total_records": len(result.data),
+            "total_amount_usd": round(total_amount, 2),
+            "total_quantity": round(total_qty, 2),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _get_inventory_status() -> dict:
+    try:
+        db = get_supabase()
+        result = db.table("inventory_status").select("*").execute()
+        if result.data:
+            return {"inventory": result.data}
+        return {"message": "Tabla de inventario vacía. Se poblará en Fase 2 con datos reales."}
+    except Exception as e:
+        return {"message": "Inventario no disponible aún. Pendiente Fase 2.", "error": str(e)}
+
+
+def _import_excel_data(file_path: str, sheet_name: str = "Sheet1") -> dict:
+    """
+    Importa datos de ventas desde Excel plano.
+    Diseñado para la base de datos real del negocio (aceites, mantecas, etc.).
+    """
+    try:
+        import pandas as pd
+
+        df = pd.read_excel(file_path, sheet_name=sheet_name)
+        logger.info(f"[demand_monitor] Excel cargado: {len(df)} filas, columnas: {list(df.columns)}")
+
+        # Normalización básica de columnas comunes
+        col_map = {
+            "fecha": "date", "date": "date",
+            "producto": "product_name", "product": "product_name",
+            "categoria": "product_category", "category": "product_category",
+            "cantidad": "quantity", "qty": "quantity",
+            "precio": "unit_price", "price": "unit_price",
+            "total": "total_amount", "monto": "total_amount",
+            "canal": "channel", "region": "region", "región": "region",
+        }
+        df.columns = [col_map.get(c.lower().strip(), c.lower().strip()) for c in df.columns]
+
+        records = df.to_dict(orient="records")
+
+        db = get_supabase()
+        # Insertar en lotes de 100
+        batch_size = 100
+        inserted = 0
+        for i in range(0, len(records), batch_size):
+            batch = records[i : i + batch_size]
+            db.table("sales_data").upsert(batch).execute()
+            inserted += len(batch)
+
+        return {
+            "success": True,
+            "rows_imported": inserted,
+            "columns_detected": list(df.columns),
+            "file": file_path,
+        }
+    except Exception as e:
+        logger.error(f"[demand_monitor] error importando Excel: {e}")
+        return {"error": str(e)}
+
+
+def _get_demand_model_id() -> str:
+    try:
+        db = get_supabase()
+        result = db.table("ml_models").select("id").eq("type", "demand_forecast").execute()
+        if result.data:
+            return result.data[0]["id"]
+    except Exception:
+        pass
+    return "00000000-0000-0000-0000-000000000001"
+
+
+TOOL_HANDLERS = {
+    "get_demand_metrics": _get_demand_metrics,
+    "get_sales_summary": _get_sales_summary,
+    "get_inventory_status": _get_inventory_status,
+    "import_excel_data": _import_excel_data,
+}
+
+
+class DemandMonitorAgent:
+    """Agente de monitoreo del modelo de forecasting de demanda y ventas."""
+
+    def run(self, message: str, session_history: list | None = None) -> tuple[str, list]:
+        return run_agent(
+            system_prompt=SYSTEM_PROMPT,
+            user_message=message,
+            tools=TOOLS,
+            tool_handlers=TOOL_HANDLERS,
+            model=MODEL_SMART,
+            conversation_history=session_history,
+        )
