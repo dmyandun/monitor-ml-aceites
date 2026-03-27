@@ -34,7 +34,7 @@ from agents.orchestrator import Orchestrator
 from agents.specialists.price_monitor import PriceMonitorAgent
 from agents.specialists.demand_monitor import DemandMonitorAgent
 from agents.agent_lab import AgentLabAgent
-from telegram.bot import TelegramBot
+from tg_bot.bot import TelegramBot
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO"),
