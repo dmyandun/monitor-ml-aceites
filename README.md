@@ -1,5 +1,5 @@
 ---
-title: Monitor ML Aceitess
+title: Monitor ML Aceites
 emoji: 🫒
 colorFrom: green
 colorTo: yellow
@@ -20,4 +20,4 @@ Sistema multiagente de monitoreo ML para producción y venta de aceites comestib
 - **orchestrator**: Clasificación de intents y routing
 
 ## Interfaz
-Telegram bot (webhook) + Gradio dashboard.
+Telegram bot (webhook) + dashboard HTML (FastAPI).
