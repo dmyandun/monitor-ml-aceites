@@ -1,10 +1,13 @@
 """
 app.py
 ------
-Entry point del HuggingFace Space.
-Combina:
-  - FastAPI: webhook de Telegram (/telegram-webhook)
-  - Gradio: dashboard de monitoreo (montado en /)
+Entry point del HuggingFace Space (Docker).
+FastAPI puro — sin Gradio, más liviano y siempre activo.
+
+Endpoints:
+  POST /telegram-webhook  → recibe updates de Telegram
+  GET  /                  → dashboard HTML de estado
+  GET  /health            → health check (UptimeRobot, etc.)
 
 Para ejecutar localmente:
     python app.py
@@ -17,12 +20,13 @@ import os
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from dotenv import load_dotenv
 load_dotenv()
 
-import gradio as gr
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import HTMLResponse
 import uvicorn
 
 # ── Agentes ───────────────────────────────────────────────
@@ -54,14 +58,14 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("monitor-ml-aceites detenido")
 
-fastapi_app = FastAPI(
+app = FastAPI(
     title="monitor-ml-aceites",
     description="Sistema multiagente de monitoreo ML para aceites comestibles",
     lifespan=lifespan,
 )
 
 
-@fastapi_app.post("/telegram-webhook")
+@app.post("/telegram-webhook")
 async def telegram_webhook(request: Request):
     """Recibe updates de Telegram vía webhook."""
     try:
@@ -73,156 +77,59 @@ async def telegram_webhook(request: Request):
         return Response(content="error", status_code=500)
 
 
-@fastapi_app.get("/health")
+@app.get("/health")
 def health():
-    """Endpoint de salud para UptimeRobot."""
+    """Health check."""
     return {"status": "ok", "service": "monitor-ml-aceites"}
 
 
-# ── Gradio Dashboard ──────────────────────────────────────
-def build_dashboard() -> gr.Blocks:
-    with gr.Blocks(
-        title="Monitor ML — Aceites",
-        theme=gr.themes.Soft(),
-        css=".gradio-container { max-width: 900px; margin: auto; }",
-    ) as demo:
+@app.get("/", response_class=HTMLResponse)
+def dashboard():
+    """Dashboard HTML de estado del sistema."""
+    stats = orchestrator.get_stats()
+    rows = "".join(
+        f"<tr><td>{name}</td><td>{count}</td><td>✅ activo</td></tr>"
+        for name, count in stats.items()
+    )
+    return f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitor ML — Aceites</title>
+  <style>
+    body {{ font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #333; }}
+    h1 {{ color: #2d6a4f; }}
+    table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+    th, td {{ padding: 10px; border: 1px solid #ddd; text-align: left; }}
+    th {{ background: #2d6a4f; color: white; }}
+    tr:nth-child(even) {{ background: #f9f9f9; }}
+    .badge {{ background: #d8f3dc; color: #1b4332; padding: 3px 8px; border-radius: 12px; font-size: 0.85em; }}
+  </style>
+</head>
+<body>
+  <h1>🫒 Monitor ML — Aceites Comestibles</h1>
+  <p>Sistema multiagente de monitoreo ML para producción y venta de aceites en Ecuador.</p>
+  <p>Interfaz principal: <strong>Telegram bot</strong></p>
 
-        gr.Markdown("# Monitor ML — Aceites Comestibles")
-        gr.Markdown(
-            "Sistema multiagente para monitoreo de modelos de forecasting de "
-            "precios y demanda de aceites comestibles (Ecuador)."
-        )
+  <h2>Agentes activos</h2>
+  <table>
+    <tr><th>Agente</th><th>Consultas</th><th>Estado</th></tr>
+    {rows}
+  </table>
 
-        with gr.Tabs():
+  <h2>Fuentes de datos</h2>
+  <ul>
+    <li><strong>Precio palma</strong>: FRED (PPOILUSDM), World Bank Pink Sheet, CFN Ecuador</li>
+    <li><strong>Ventas</strong>: FMCG Kaggle → datos reales Excel (Fase 2)</li>
+    <li><strong>Ecuador</strong>: ANCUPA, USDA FAS PSD Online</li>
+  </ul>
 
-            # ── Tab: Chat con agentes ──────────────────────
-            with gr.TabItem("Chat con Agentes"):
-                gr.Markdown("Consulta directamente a los agentes especialistas.")
-
-                chatbot = gr.Chatbot(height=400, label="Conversación")
-                with gr.Row():
-                    msg_input = gr.Textbox(
-                        placeholder="Ej: ¿Cuál es el estado del modelo de precios?",
-                        label="Mensaje",
-                        scale=4,
-                    )
-                    send_btn = gr.Button("Enviar", variant="primary", scale=1)
-
-                session_state = gr.State([])
-
-                def chat(message: str, history: list, session: list):
-                    if not message.strip():
-                        return history, session, ""
-
-                    agent_name = orchestrator.classify(message)
-                    agent = agent_map.get(agent_name)
-
-                    if agent:
-                        response, updated_session = agent.run(message, session[-20:])
-                    else:
-                        response = f"Agente '{agent_name}' no disponible."
-                        updated_session = session
-
-                    history.append((message, f"[{agent_name}] {response}"))
-                    return history, updated_session, ""
-
-                send_btn.click(
-                    chat,
-                    inputs=[msg_input, chatbot, session_state],
-                    outputs=[chatbot, session_state, msg_input],
-                )
-                msg_input.submit(
-                    chat,
-                    inputs=[msg_input, chatbot, session_state],
-                    outputs=[chatbot, session_state, msg_input],
-                )
-
-            # ── Tab: Estado del sistema ────────────────────
-            with gr.TabItem("Estado del Sistema"):
-                gr.Markdown("### Agentes registrados")
-
-                def get_system_status():
-                    stats = orchestrator.get_stats()
-                    rows = [[name, count, "✅ activo"] for name, count in stats.items()]
-                    return rows
-
-                status_table = gr.Dataframe(
-                    headers=["Agente", "Consultas", "Estado"],
-                    value=get_system_status(),
-                    interactive=False,
-                )
-                refresh_btn = gr.Button("Actualizar")
-                refresh_btn.click(get_system_status, outputs=status_table)
-
-            # ── Tab: Recomendaciones Agent Lab ─────────────
-            with gr.TabItem("Recomendaciones Agent Lab"):
-                gr.Markdown(
-                    "Recomendaciones proactivas generadas por Agent Lab "
-                    "que requieren aprobación humana."
-                )
-
-                def get_recommendations():
-                    try:
-                        from database.supabase_client import get_supabase
-                        db = get_supabase()
-                        result = (
-                            db.table("agent_lab_recommendations")
-                            .select("title, target_agent, type, status, priority, created_at")
-                            .order("created_at", desc=True)
-                            .limit(20)
-                            .execute()
-                        )
-                        if result.data:
-                            return [[
-                                r["title"], r["target_agent"], r["type"],
-                                r["status"], r["priority"], r["created_at"][:10]
-                            ] for r in result.data]
-                    except Exception as e:
-                        logger.warning(f"No se pudieron cargar recomendaciones: {e}")
-                    return [["Sin datos", "—", "—", "—", "—", "—"]]
-
-                rec_table = gr.Dataframe(
-                    headers=["Título", "Agente", "Tipo", "Estado", "Prioridad", "Fecha"],
-                    value=get_recommendations(),
-                    interactive=False,
-                )
-                refresh_rec_btn = gr.Button("Actualizar")
-                refresh_rec_btn.click(get_recommendations, outputs=rec_table)
-
-            # ── Tab: Info ──────────────────────────────────
-            with gr.TabItem("Acerca de"):
-                gr.Markdown("""
-## monitor-ml-aceites
-
-Sistema multiagente basado en Claude (Anthropic) para monitoreo de modelos ML
-aplicados a la producción y venta de aceites comestibles en Ecuador.
-
-### Agentes
-| Agente | Rol |
-|--------|-----|
-| `price_monitor` | Forecasting de precios del aceite de palma (FRED/World Bank) |
-| `demand_monitor` | Forecasting de demanda y ventas (aceites, mantecas) |
-| `agent_lab` | Meta-agente de auto-mejora continua |
-| `orchestrator` | Clasificación de intents y routing |
-
-### Fuentes de datos
-- **Precio palma**: FRED (PPOILUSDM), World Bank Pink Sheet, CFN Ecuador
-- **Ventas**: FMCG Kaggle (proxy) → datos reales del negocio en Excel (Fase 2)
-- **Ecuador**: ANCUPA, USDA FAS PSD Online
-
-### Arquitectura
-Desplegado en HuggingFace Spaces (Gradio + FastAPI).
-Interfaz principal vía Telegram bot (webhook).
-Base de datos: Supabase.
-Cron diario de research: GitHub Actions.
-                """)
-
-    return demo
-
-
-# ── Montar Gradio sobre FastAPI ───────────────────────────
-dashboard = build_dashboard()
-app = gr.mount_gradio_app(fastapi_app, dashboard, path="/")
+  <p style="margin-top:40px; color:#999; font-size:0.85em;">
+    <a href="/docs">API docs</a> · <a href="/health">health</a>
+  </p>
+</body>
+</html>"""
 
 
 # ── Punto de entrada local ────────────────────────────────

@@ -3,9 +3,8 @@ title: Monitor ML Aceitess
 emoji: 🫒
 colorFrom: green
 colorTo: yellow
-sdk: gradio
-sdk_version: 4.44.0
-app_file: app.py
+sdk: docker
+app_port: 7860
 pinned: false
 license: mit
 ---
