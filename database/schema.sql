@@ -131,6 +131,29 @@ INSERT INTO data_sources (name, type, description, url) VALUES
     ('ANCUPA Ecuador', 'ancupa', 'Estadísticas nacionales palma aceitera Ecuador desde 1994', 'http://ancupa.com/estadisticas/')
 ON CONFLICT DO NOTHING;
 
+-- ─── Eventos de mercado (news-aware forecasting) ──────────
+-- Eventos globales que afectan el precio del aceite de palma.
+-- Scrapeados diariamente por research_pipeline.py usando DuckDuckGo.
+-- Los agentes leen estos eventos para contextualizar sus forecasts.
+CREATE TABLE IF NOT EXISTS market_events (
+    id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    event_date       DATE NOT NULL,                -- fecha del evento (no del scraping)
+    discovered_at    TIMESTAMPTZ DEFAULT NOW(),    -- cuándo lo encontramos
+    title            TEXT NOT NULL,
+    description      TEXT,
+    source_url       TEXT UNIQUE,
+    source_name      VARCHAR(100),
+    event_type       VARCHAR(50),   -- 'weather' | 'geopolitical' | 'policy' | 'supply' | 'demand' | 'trade' | 'macro'
+    region           VARCHAR(100),  -- 'Malaysia' | 'Indonesia' | 'Ecuador' | 'global' | 'EU' | 'India' | etc.
+    price_direction  VARCHAR(10),   -- 'bullish' | 'bearish' | 'neutral'
+    price_impact_pct DECIMAL(5,2),  -- impacto estimado en % sobre precio (+ sube, - baja)
+    confidence       DECIMAL(3,2),  -- confianza de la clasificación (0.0 a 1.0)
+    tags             JSONB DEFAULT '[]',
+    created_at       TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_market_events_date ON market_events (event_date DESC);
+CREATE INDEX IF NOT EXISTS idx_market_events_type ON market_events (event_type, price_direction);
+
 -- ─── Agent Lab: Research ──────────────────────────────────
 CREATE TABLE IF NOT EXISTS agent_lab_research (
     id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,

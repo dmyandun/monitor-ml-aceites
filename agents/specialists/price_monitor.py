@@ -24,13 +24,28 @@ Tu rol:
 - Detectar y alertar sobre anomalías, drift de datos o degradación de métricas
 - Explicar las tendencias de precio y su impacto en el negocio
 - Sugerir acciones cuando el modelo necesita reentrenamiento
+- Dar proyecciones contextualizadas combinando el modelo estadístico + eventos globales del mercado
 
 El negocio es una empresa ecuatoriana de producción y venta de aceites comestibles y mantecas.
 El precio mundial del aceite de palma (USD/tonelada métrica) es el insumo principal del modelo.
-Fuentes de datos: FRED (PPOILUSDM), World Bank Pink Sheet, CFN Ecuador, ANCUPA.
+Fuentes de datos: FRED (PPOILUSDM), World Bank Pink Sheet, Commodities-API (precio diario).
 
-Cuando reportes métricas, sé específico con números. Cuando detectes problemas, prioriza claridad.
-Responde siempre en español."""
+CUANDO TE PIDAN UNA PROYECCIÓN DE PRECIO:
+1. Llama a get_price_forecast para obtener los números del modelo Prophet
+2. Llama a get_market_context para ver los eventos globales recientes
+3. Combina ambas fuentes en tu respuesta: el número del modelo + el sesgo que introducen los eventos
+4. Ejemplo de respuesta: "El modelo proyecta $X para el próximo mes. Sin embargo, la sequía
+   en Malaysia y la nueva política de biocombustibles de la UE sugieren presión alcista,
+   por lo que el precio real podría acercarse al límite superior del intervalo ($Y)."
+
+Factores clave que mueven el precio del aceite de palma:
+- Producción: cosecha en Malaysia e Indonesia (>85% del mercado mundial)
+- Demanda: India, China, UE (biocombustibles), mercados emergentes
+- Competencia: precio soja, girasol, colza
+- Política: mandatos de biocombustibles, restricciones de exportación
+- Clima: El Niño/La Niña afecta cosechas de palma 12-18 meses después
+
+Cuando reportes métricas, sé específico con números. Responde siempre en español."""
 
 # Definiciones de herramientas
 TOOLS = [
@@ -80,6 +95,31 @@ TOOLS = [
             "Incluye precio predicho, intervalo de confianza 80% y MAPE del modelo."
         ),
         "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_market_context",
+        "description": (
+            "Obtiene los eventos globales recientes que afectan el precio del aceite de palma "
+            "(clima, geopolítica, políticas de biocombustibles, producción en Malaysia/Indonesia, "
+            "demanda de India/China, etc.). Clasificados como bullish/bearish con impacto estimado en %. "
+            "Usar junto a get_price_forecast para dar una proyección ajustada a eventos del mundo real."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days": {
+                    "type": "integer",
+                    "description": "Cuántos días hacia atrás buscar eventos (default: 30).",
+                    "default": 30,
+                },
+                "direction": {
+                    "type": "string",
+                    "enum": ["bullish", "bearish", "neutral", "all"],
+                    "description": "Filtrar por dirección de impacto (default: all).",
+                    "default": "all",
+                },
+            },
+        },
     },
 ]
 
@@ -233,12 +273,60 @@ def _get_price_model_id() -> str:
     return "00000000-0000-0000-0000-000000000000"  # Placeholder
 
 
+def _get_market_context(days: int = 30, direction: str = "all") -> dict:
+    """Lee eventos recientes de market_events desde Supabase."""
+    try:
+        from datetime import datetime, timedelta
+        db = get_supabase()
+        since = (datetime.utcnow() - timedelta(days=days)).date().isoformat()
+
+        query = (
+            db.table("market_events")
+            .select("event_date, title, event_type, region, price_direction, price_impact_pct, confidence, description")
+            .gte("event_date", since)
+            .order("event_date", desc=True)
+            .limit(20)
+        )
+        if direction != "all":
+            query = query.eq("price_direction", direction)
+
+        result = query.execute()
+
+        if not result.data:
+            return {
+                "message": (
+                    f"No hay eventos de mercado registrados en los últimos {days} días. "
+                    "El pipeline diario (GitHub Actions cron) los actualiza cada noche."
+                )
+            }
+
+        # Calcular sesgo neto del mercado
+        bullish = [e for e in result.data if e["price_direction"] == "bullish"]
+        bearish = [e for e in result.data if e["price_direction"] == "bearish"]
+        impacts = [e["price_impact_pct"] for e in result.data if e.get("price_impact_pct")]
+        net_impact = round(sum(impacts) / len(impacts), 1) if impacts else 0
+
+        return {
+            "events": result.data,
+            "total": len(result.data),
+            "bullish_count": len(bullish),
+            "bearish_count": len(bearish),
+            "net_impact_pct": net_impact,
+            "market_bias": "bullish" if net_impact > 2 else "bearish" if net_impact < -2 else "neutral",
+            "period_days": days,
+        }
+    except Exception as e:
+        logger.error(f"[price_monitor] error consultando market_events: {e}")
+        return {"error": str(e)}
+
+
 TOOL_HANDLERS = {
     "get_latest_price_metrics": _get_latest_price_metrics,
     "get_price_history": _get_price_history,
     "detect_price_anomalies": _detect_price_anomalies,
     "get_model_drift_status": _get_model_drift_status,
     "get_price_forecast": _get_price_forecast,
+    "get_market_context": _get_market_context,
 }
 
 

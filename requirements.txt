@@ -21,5 +21,9 @@ pandas>=2.2.0
 numpy>=1.26.0
 scikit-learn>=1.5.0
 prophet>=1.1.5
+
+# Noticias de mercado (news-aware forecasting)
+duckduckgo-search>=6.0.0
+
 # openpyxl>=3.1.0     # descomentar cuando se integre Excel del negocio
 # xlrd>=2.0.1         # descomentar cuando se integre Excel del negocio

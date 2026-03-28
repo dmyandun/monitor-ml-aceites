@@ -4,13 +4,15 @@ research_pipeline.py
 Pipeline diario de investigación. Ejecutado por GitHub Actions cada noche.
 
 Pasos:
+  0. PRICE   — Fetch precio diario CPO desde Commodities-API (si hay key configurada)
   1. SCRAPE  — Fetch RSS/HTML de 6 fuentes de AI research
   2. DEDUP   — Filtrar URLs ya procesadas en DB
   3. SCORE   — Haiku evalúa relevancia para el dominio (0.0 a 1.0)
   4. SAVE    — Guardar findings con score > 0.3
   5. BLOAT   — Verificar skill bloat en agentes
   6. IMPROVE — Agent Lab ejecuta ciclo completo de mejora
-  7. REPORT  — Enviar resumen vía Telegram
+  7. EVENTS  — Scraping noticias de palma (DuckDuckGo) + clasificación Claude
+  8. REPORT  — Enviar resumen vía Telegram
 
 Uso:
     python -m cron.research_pipeline
@@ -44,6 +46,30 @@ RESEARCH_SOURCES = [
     {"name": "LangChain Blog",    "url": "https://blog.langchain.dev/rss/", "tier": "ecosystem"},
     {"name": "HuggingFace Blog",  "url": "https://huggingface.co/blog/feed.xml", "tier": "ecosystem"},
 ]
+
+EVENT_CLASSIFICATION_PROMPT = """Eres un analista de commodities especializado en aceite de palma.
+
+Clasifica esta noticia de mercado y responde SOLO con un JSON válido (sin markdown, sin texto extra):
+
+{{
+  "event_type": "weather|geopolitical|policy|supply|demand|trade|macro",
+  "region": "Malaysia|Indonesia|Ecuador|India|EU|China|global|other",
+  "price_direction": "bullish|bearish|neutral",
+  "price_impact_pct": <número entre -20 y +20, estimación del impacto % en precio>,
+  "confidence": <número entre 0.0 y 1.0>,
+  "event_date": "<YYYY-MM-DD o fecha aproximada del evento, no de hoy>",
+  "tags": ["tag1", "tag2"]
+}}
+
+Guía de clasificación:
+- bullish: sube precio (sequía, restricción exportaciones, mayor demanda biocombustibles, reducción cosecha)
+- bearish: baja precio (cosecha récord, caída demanda, competencia soja/girasol, recesión)
+- neutral: impacto ambiguo o mínimo
+
+Noticia:
+Título: {title}
+Descripción: {description}
+Fuente: {source}"""
 
 RELEVANCE_PROMPT = """Eres un evaluador de relevancia para un sistema de agentes de monitoreo ML
 aplicado a la industria de aceites comestibles en Ecuador.
@@ -134,6 +160,192 @@ async def score_relevance(title: str, summary: str) -> float:
         return 0.0
 
 
+async def fetch_daily_cpo_price(dry_run: bool = False) -> str:
+    """Paso 0: fetch precio diario CPO si COMMODITIES_API_KEY está configurada."""
+    api_key = os.environ.get("COMMODITIES_API_KEY", "")
+    if not api_key:
+        return "COMMODITIES_API_KEY no configurada — omitiendo fetch de precio diario"
+
+    try:
+        url = "https://commodities-api.com/api/latest"
+        params = {"access_key": api_key, "base": "USD", "symbols": "CPO"}
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+
+        if not data.get("success"):
+            error = data.get("error", {})
+            return f"API error: {error.get('type')} — {error.get('info')}"
+
+        rate = data["data"]["rates"].get("CPO")
+        if not rate:
+            return "CPO no encontrado en respuesta"
+
+        # Normalizar a USD/MT (precio palma ~$600-1200)
+        if 400 <= rate <= 1500:
+            price = rate
+        elif 0 < rate < 1:
+            price = 1.0 / rate
+        else:
+            price = rate
+
+        price = round(price, 2)
+
+        if not dry_run:
+            from database.supabase_client import get_supabase
+            db = get_supabase()
+            from datetime import date
+            db.table("price_data").upsert({
+                "date": date.today().isoformat(),
+                "actual_price": price,
+                "source": "commodities-api",
+                "currency": "USD",
+                "unit": "USD/MT",
+            }, on_conflict="date,source").execute()
+
+        return f"Precio CPO hoy: ${price} USD/MT (guardado en price_data)"
+
+    except Exception as e:
+        return f"Error fetch precio: {e}"
+
+
+async def fetch_palm_oil_news() -> list[dict]:
+    """
+    Busca noticias recientes sobre precio de aceite de palma usando DuckDuckGo.
+    Sin API key. Búsqueda en inglés para máxima cobertura.
+    """
+    try:
+        from duckduckgo_search import DDGS
+
+        queries = [
+            "palm oil price forecast 2025",
+            "crude palm oil CPO market news",
+            "Malaysia Indonesia palm oil production export",
+            "palm oil biofuel policy demand",
+        ]
+
+        all_results = []
+        seen_urls = set()
+
+        with DDGS() as ddgs:
+            for query in queries:
+                try:
+                    results = ddgs.news(keywords=query, max_results=5, timelimit="m")  # último mes
+                    for r in results:
+                        url = r.get("url", "")
+                        if url and url not in seen_urls:
+                            seen_urls.add(url)
+                            all_results.append({
+                                "title": r.get("title", ""),
+                                "description": r.get("body", "")[:400],
+                                "source_url": url,
+                                "source_name": r.get("source", ""),
+                                "published": r.get("date", ""),
+                            })
+                except Exception as e:
+                    logger.warning(f"Error buscando '{query}': {e}")
+
+        logger.info(f"Noticias de palma encontradas: {len(all_results)}")
+        return all_results
+
+    except ImportError:
+        logger.warning("duckduckgo-search no instalado. Omitiendo paso de noticias de palma.")
+        return []
+    except Exception as e:
+        logger.warning(f"Error en fetch_palm_oil_news: {e}")
+        return []
+
+
+async def classify_market_event(article: dict) -> dict | None:
+    """Usa Claude Haiku para clasificar el impacto en precio del artículo."""
+    import anthropic
+    import json
+    try:
+        client = anthropic.Anthropic()
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=300,
+            messages=[{
+                "role": "user",
+                "content": EVENT_CLASSIFICATION_PROMPT.format(
+                    title=article["title"],
+                    description=article["description"][:300],
+                    source=article["source_name"],
+                ),
+            }],
+        )
+        raw = response.content[0].text.strip()
+        classification = json.loads(raw)
+        return classification
+    except Exception as e:
+        logger.warning(f"Error clasificando evento '{article['title'][:50]}': {e}")
+        return None
+
+
+async def run_palm_oil_events_step(dry_run: bool = False) -> int:
+    """
+    Paso 7: Scraping de noticias de palma + clasificación + guardado en market_events.
+    Retorna número de eventos guardados.
+    """
+    articles = await fetch_palm_oil_news()
+    if not articles:
+        return 0
+
+    # Dedup contra URLs ya guardadas
+    saved_count = 0
+    if not dry_run:
+        from database.supabase_client import get_supabase
+        db = get_supabase()
+        existing = db.table("market_events").select("source_url").execute()
+        existing_urls = {r["source_url"] for r in (existing.data or []) if r.get("source_url")}
+        articles = [a for a in articles if a["source_url"] not in existing_urls]
+
+    logger.info(f"Artículos nuevos a clasificar: {len(articles)}")
+
+    for article in articles:
+        classification = await classify_market_event(article)
+        if not classification:
+            continue
+
+        # Parsear fecha del evento
+        from datetime import date
+        event_date_str = classification.get("event_date") or date.today().isoformat()
+        try:
+            event_date = date.fromisoformat(event_date_str[:10]).isoformat()
+        except ValueError:
+            event_date = date.today().isoformat()
+
+        record = {
+            "event_date": event_date,
+            "title": article["title"],
+            "description": article["description"],
+            "source_url": article["source_url"],
+            "source_name": article["source_name"],
+            "event_type": classification.get("event_type", "macro"),
+            "region": classification.get("region", "global"),
+            "price_direction": classification.get("price_direction", "neutral"),
+            "price_impact_pct": classification.get("price_impact_pct"),
+            "confidence": classification.get("confidence"),
+            "tags": classification.get("tags", []),
+        }
+
+        logger.info(
+            f"  [{record['price_direction'].upper():7s}] "
+            f"{record['event_type']:12s} | {record['region']:10s} | "
+            f"{record['price_impact_pct']:+.1f}% | {article['title'][:60]}"
+        )
+
+        if not dry_run:
+            try:
+                db.table("market_events").insert(record).execute()
+                saved_count += 1
+            except Exception as e:
+                logger.warning(f"Error guardando evento: {e}")
+
+    return saved_count
+
+
 async def run_pipeline(dry_run: bool = False):
     """Ejecuta el pipeline completo de investigación."""
     logger.info("=== Iniciando pipeline de research ===")
@@ -141,6 +353,11 @@ async def run_pipeline(dry_run: bool = False):
 
     from database.supabase_client import get_supabase
     db = get_supabase() if not dry_run else None
+
+    # 0. PRECIO DIARIO CPO
+    logger.info("PASO 0: Fetch precio diario CPO...")
+    price_result = await fetch_daily_cpo_price(dry_run=dry_run)
+    logger.info(f"  {price_result}")
 
     # 1. SCRAPE
     logger.info("PASO 1: Scraping de fuentes...")
@@ -203,13 +420,19 @@ async def run_pipeline(dry_run: bool = False):
     else:
         lab_report = "[dry-run: Agent Lab omitido]"
 
-    # 7. REPORT
+    # 7. EVENTOS MERCADO PALMA
+    logger.info("PASO 7: Scraping noticias de palma (DuckDuckGo + clasificación Claude)...")
+    events_saved = await run_palm_oil_events_step(dry_run=dry_run)
+    logger.info(f"Eventos de mercado guardados: {events_saved}")
+
+    # 8. REPORT
     elapsed = (datetime.utcnow() - start_time).seconds
     report = (
         f"📊 *Reporte diario Agent Lab*\n\n"
-        f"• Fuentes scrapeadas: {len(RESEARCH_SOURCES)}\n"
-        f"• Entradas procesadas: {len(all_entries)}\n"
-        f"• Findings guardados: {saved}\n"
+        f"• Precio CPO hoy: {price_result}\n"
+        f"• Fuentes AI scrapeadas: {len(RESEARCH_SOURCES)}\n"
+        f"• Findings AI guardados: {saved}\n"
+        f"• Eventos mercado palma: {events_saved} nuevos\n"
         f"• Duración: {elapsed}s\n\n"
         f"*Resumen Agent Lab:*\n{lab_report[:500]}"
     )
