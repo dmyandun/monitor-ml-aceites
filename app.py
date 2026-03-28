@@ -41,6 +41,8 @@ logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO"),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
+# Suprimir logs de httpx para no exponer tokens de Telegram en URLs
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # ── Inicialización de agentes ─────────────────────────────
