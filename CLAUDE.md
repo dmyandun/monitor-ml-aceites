@@ -24,7 +24,7 @@ agents/
     demand_monitor.py  # Monitoreo modelo forecasting de demanda/ventas
 tools/
   sub_agent_tool.py    # subAgentTool() — delegación jerárquica
-telegram/
+tg_bot/
   bot.py               # Webhook handler + comandos
 database/
   supabase_client.py   # Cliente Supabase
@@ -74,11 +74,6 @@ python app.py
 # Aplicar schema a Supabase
 # Ejecutar database/schema.sql en el SQL Editor de Supabase
 ```
-
-## Control de versiones
-
-Después de cada cambio relevante: commit + push a GitHub inmediatamente.
-Formato: `<tipo>: <descripción en imperativo>`
 
 ## Seguridad — reglas estrictas
 
