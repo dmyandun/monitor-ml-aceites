@@ -1,0 +1,17 @@
+venv311/
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.env
+.git/
+data/raw/
+data/processed/
+models/
+*.pkl
+*.joblib
+*.csv
+*.xlsx
+*.xls
+.pytest_cache/
