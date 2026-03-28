@@ -1,0 +1,19 @@
+# requirements-ml.txt
+# -------------------
+# Dependencias para entrenamiento de modelos ML.
+# NO se instalan en HF Space (demasiado pesadas para Docker build).
+#
+# Uso local:
+#   pip install -r requirements-ml.txt
+#
+# GitHub Actions (workflow de entrenamiento mensual):
+#   pip install -r requirements.txt -r requirements-ml.txt
+
+# Base (mismo que requirements.txt)
+-r requirements.txt
+
+# ML — forecasting
+pandas>=2.2.0
+numpy>=1.26.0
+scikit-learn>=1.5.0
+prophet>=1.1.5
