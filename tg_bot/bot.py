@@ -94,36 +94,23 @@ class TelegramBot:
         if not self.orchestrator:
             return "Sistema no inicializado. Contacta al administrador."
 
-        # Clasificar intent (sync → thread para no bloquear el event loop)
-        try:
-            agent_name = await asyncio.to_thread(self.orchestrator.classify, text)
-        except Exception as e:
-            logger.error(f"[TelegramBot] error clasificando mensaje: {e}", exc_info=True)
-            return "No pude clasificar tu consulta. Por favor intenta de nuevo."
-
+        # Clasificar intent
+        agent_name = self.orchestrator.classify(text)
         agent = self.agent_map.get(agent_name)
+
         if not agent:
             return f"Agente '{agent_name}' no disponible en este momento."
-
-        logger.info(f"[TelegramBot] enrutando a '{agent_name}'")
 
         # Obtener/crear historial de sesión
         session_history = self.sessions.get(user_id, [])
 
-        # Ejecutar agente (sync → thread para no bloquear el event loop)
-        try:
-            response, updated_history = await asyncio.to_thread(
-                agent.run, text, session_history
-            )
-            # Guardar historial (últimos 20 mensajes para no crecer infinito)
-            self.sessions[user_id] = updated_history[-20:]
-            return response
-        except Exception as e:
-            logger.error(f"[TelegramBot] error en agente '{agent_name}': {e}", exc_info=True)
-            return (
-                f"⚠️ Error al procesar tu consulta con el agente `{agent_name}`.\n"
-                f"Detalle: `{type(e).__name__}: {str(e)[:120]}`"
-            )
+        # Ejecutar agente
+        response, updated_history = agent.run(text, session_history)
+
+        # Guardar historial (últimos 20 mensajes para no crecer infinito)
+        self.sessions[user_id] = updated_history[-20:]
+
+        return response
 
     async def _handle_command(self, command: str, user_id: int, user_name: str) -> str:
         """Maneja comandos especiales de Telegram."""
