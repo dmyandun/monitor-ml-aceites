@@ -210,6 +210,30 @@ def dashboard():
     .pipeline-arrow { color: #4a5568; font-size: 0.9rem; }
     .pipeline-step.active { background: #1c4532; color: #68d391; border: 1px solid #276749; }
     .pipeline-step.pending { background: #3d2e00; color: #f6c90e; }
+
+    /* ── Diagrama de agentes ───────────────────────────────── */
+    .agent-diagram { position: relative; padding: 16px 8px 8px; }
+    .diagram-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+                   pointer-events: none; overflow: visible; }
+    .diagram-root-row { display: flex; justify-content: center; margin-bottom: 56px; }
+    .diagram-children-row { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
+    .agent-node { background: #141620; border: 1px solid #2d3748; border-radius: 14px;
+                  padding: 18px 22px; text-align: center; min-width: 170px; max-width: 210px;
+                  transition: border-color .2s, box-shadow .2s; cursor: default; position: relative; z-index: 1; }
+    .agent-node:hover { border-color: #4a5568; box-shadow: 0 4px 20px rgba(0,0,0,.4); }
+    .agent-node-root { min-width: 220px; border-color: #276749;
+                       box-shadow: 0 0 24px rgba(104,211,145,.12); background: #111a17; }
+    .agent-node-root:hover { border-color: #38a169; box-shadow: 0 0 32px rgba(104,211,145,.22); }
+    .node-emoji { font-size: 2rem; margin-bottom: 8px; }
+    .node-label { font-weight: 700; font-size: 0.88rem; font-family: monospace;
+                  color: #e2e8f0; margin-bottom: 4px; }
+    .node-desc { font-size: 0.7rem; color: #718096; margin-bottom: 10px; line-height: 1.4; }
+    .node-pills { display: flex; gap: 5px; justify-content: center; flex-wrap: wrap; }
+    .pill { display: inline-block; padding: 2px 7px; border-radius: 20px;
+            font-size: 0.67rem; font-weight: 600; }
+    .pill-green { background: #1c4532; color: #68d391; }
+    .pill-blue  { background: #1a2e4a; color: #90cdf4; }
+    .pill-gray  { background: #2d3748; color: #a0aec0; }
   </style>
 </head>
 <body>
@@ -225,10 +249,56 @@ def dashboard():
 </header>
 
 <main>
-  <!-- Agentes -->
-  <div class="section-title">Agentes</div>
-  <div class="grid grid-4" id="agents-grid">
-    <div class="card"><div class="empty">Cargando...</div></div>
+  <!-- Diagrama de agentes -->
+  <div class="section-title">Arquitectura multiagente</div>
+  <div class="card" style="padding: 24px 16px 20px;">
+    <div class="agent-diagram" id="agent-diagram">
+      <svg class="diagram-svg" id="diagram-svg"></svg>
+
+      <!-- Orchestrator (raíz) -->
+      <div class="diagram-root-row">
+        <div class="agent-node agent-node-root" id="dnode-orchestrator">
+          <div class="node-emoji">🔀</div>
+          <div class="node-label">orchestrator</div>
+          <div class="node-desc">Clasifica intents y enruta<br>al especialista correcto</div>
+          <div class="node-pills">
+            <span class="pill pill-green">Haiku 4.5</span>
+            <span class="pill pill-blue" id="dcalls-orchestrator">0 calls</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Especialistas -->
+      <div class="diagram-children-row">
+        <div class="agent-node" id="dnode-price_monitor">
+          <div class="node-emoji">📈</div>
+          <div class="node-label">price_monitor</div>
+          <div class="node-desc">Forecasting de precios<br>aceite de palma</div>
+          <div class="node-pills">
+            <span class="pill pill-green">Sonnet 4.6</span>
+            <span class="pill pill-blue" id="dcalls-price_monitor">0 calls</span>
+          </div>
+        </div>
+        <div class="agent-node" id="dnode-demand_monitor">
+          <div class="node-emoji">📦</div>
+          <div class="node-label">demand_monitor</div>
+          <div class="node-desc">Forecasting de demanda<br>y ventas</div>
+          <div class="node-pills">
+            <span class="pill pill-green">Sonnet 4.6</span>
+            <span class="pill pill-blue" id="dcalls-demand_monitor">0 calls</span>
+          </div>
+        </div>
+        <div class="agent-node" id="dnode-agent_lab">
+          <div class="node-emoji">🔬</div>
+          <div class="node-label">agent_lab</div>
+          <div class="node-desc">Meta-agente de mejora<br>continua del sistema</div>
+          <div class="node-pills">
+            <span class="pill pill-green">Sonnet 4.6</span>
+            <span class="pill pill-blue" id="dcalls-agent_lab">0 calls</span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Métricas + Recomendaciones -->
@@ -282,33 +352,67 @@ def dashboard():
 </main>
 
 <script>
+function drawDiagramConnections() {
+  const svg = document.getElementById('diagram-svg');
+  const container = document.getElementById('agent-diagram');
+  if (!svg || !container) return;
+
+  const cr = container.getBoundingClientRect();
+  const root = document.getElementById('dnode-orchestrator');
+  if (!root) return;
+
+  const rr = root.getBoundingClientRect();
+  const rx = rr.left - cr.left + rr.width / 2;
+  const ry = rr.top  - cr.top  + rr.height;
+
+  const specialists = ['dnode-price_monitor', 'dnode-demand_monitor', 'dnode-agent_lab'];
+  let markup = '';
+
+  // Recoge x de cada hijo para la línea horizontal
+  const pts = specialists.map(id => {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left - cr.left + r.width / 2, y: r.top - cr.top };
+  }).filter(Boolean);
+
+  if (!pts.length) return;
+
+  const midY = ry + (pts[0].y - ry) * 0.45;
+
+  // Línea vertical desde orchestrator
+  markup += `<line x1="${rx}" y1="${ry}" x2="${rx}" y2="${midY}"
+               stroke="#276749" stroke-width="2" opacity=".7"/>`;
+  // Línea horizontal que conecta todos los hijos
+  const xMin = Math.min(...pts.map(p => p.x));
+  const xMax = Math.max(...pts.map(p => p.x));
+  markup += `<line x1="${xMin}" y1="${midY}" x2="${xMax}" y2="${midY}"
+               stroke="#276749" stroke-width="2" opacity=".7"/>`;
+
+  // Línea vertical y punto de llegada por cada hijo
+  for (const p of pts) {
+    markup += `<line x1="${p.x}" y1="${midY}" x2="${p.x}" y2="${p.y}"
+                 stroke="#276749" stroke-width="2" opacity=".7"/>`;
+    markup += `<circle cx="${p.x}" cy="${p.y}" r="4" fill="#276749" opacity=".9"/>`;
+  }
+  // Punto de salida en orchestrator
+  markup += `<circle cx="${rx}" cy="${ry}" r="5" fill="#38a169"/>`;
+
+  svg.innerHTML = markup;
+}
+
 async function refresh() {
   try {
     const res = await fetch('/api/status');
     const d = await res.json();
 
-    // Agentes
-    const agentModels = { 'claude-haiku-4-5-20251001': 'Haiku 4.5', 'claude-sonnet-4-6': 'Sonnet 4.6' };
-    document.getElementById('agents-grid').innerHTML = d.agents.map(a => `
-      <div class="card">
-        <div class="card-header">
-          <span class="card-icon">${a.icon}</span>
-          <div>
-            <div class="card-title">${a.name}</div>
-            <div class="card-subtitle">${a.desc}</div>
-          </div>
-        </div>
-        <div class="metric"><span>Estado</span>
-          <span class="badge badge-green">✓ activo</span></div>
-        <div class="metric"><span>Consultas</span>
-          <span class="metric-val">${a.calls}</span></div>
-        <div class="metric"><span>Modelo</span>
-          <span class="metric-val">${agentModels[a.model] || a.model}</span></div>
-        <div class="metric"><span>Herramientas</span>
-          <span class="metric-val">${a.tools}</span></div>
-        <div class="metric"><span>Config en DB</span>
-          <span class="badge ${a.in_db ? 'badge-green' : 'badge-yellow'}">${a.in_db ? '✓ persistida' : '⚠ pendiente'}</span></div>
-      </div>`).join('');
+    // Actualizar call-counts en los nodos del diagrama
+    d.agents.forEach(a => {
+      const el = document.getElementById(`dcalls-${a.name}`);
+      if (el) el.textContent = `${a.calls} calls`;
+    });
+    // Redibujar conexiones (los nodos ya existen en el DOM)
+    drawDiagramConnections();
 
     // Estado de datos
     document.getElementById('data-status').innerHTML = `
@@ -342,6 +446,7 @@ async function refresh() {
 
 refresh();
 setInterval(refresh, 30000);
+window.addEventListener('resize', drawDiagramConnections);
 </script>
 </body>
 </html>"""
