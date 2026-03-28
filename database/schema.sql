@@ -172,6 +172,25 @@ CREATE TABLE IF NOT EXISTS agent_lab_changes (
     created_at        TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ─── Forecasts de precios ─────────────────────────────────
+-- Almacena las predicciones generadas por el modelo Prophet
+-- El modelo se reentrena mensualmente via GitHub Actions cron
+CREATE TABLE IF NOT EXISTS price_forecasts (
+    id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    forecast_run_at TIMESTAMPTZ DEFAULT NOW(),  -- cuándo se generó el forecast
+    target_date     DATE NOT NULL,              -- fecha que se predice
+    horizon         VARCHAR(20) NOT NULL,       -- 'tomorrow' | 'next_week' | 'month_1' | 'month_2'
+    predicted_price DECIMAL(10,2) NOT NULL,     -- USD/MT
+    lower_bound     DECIMAL(10,2),              -- intervalo 80%
+    upper_bound     DECIMAL(10,2),              -- intervalo 80%
+    model_name      VARCHAR(100) DEFAULT 'palm_price_forecast',
+    data_points     INTEGER,                    -- registros usados para entrenar
+    mape            DECIMAL(6,2),               -- error del modelo al momento del entrenamiento (%)
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_price_forecasts_run ON price_forecasts (forecast_run_at DESC);
+CREATE INDEX IF NOT EXISTS idx_price_forecasts_horizon ON price_forecasts (horizon, forecast_run_at DESC);
+
 -- ─── Triggers: updated_at automático ─────────────────────
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$

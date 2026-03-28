@@ -72,6 +72,15 @@ TOOLS = [
         "description": "Evalúa si hay drift en los datos de entrada o en la distribución de predicciones del modelo.",
         "input_schema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "get_price_forecast",
+        "description": (
+            "Obtiene el forecast más reciente del precio del aceite de palma para los 4 horizontes: "
+            "mañana (tomorrow), semana siguiente (next_week), mes 1 (month_1) y mes 2 (month_2). "
+            "Incluye precio predicho, intervalo de confianza 80% y MAPE del modelo."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
 ]
 
 
@@ -146,6 +155,55 @@ def _detect_price_anomalies() -> dict:
         return {"error": str(e)}
 
 
+def _get_price_forecast() -> dict:
+    """Obtiene el forecast más reciente desde Supabase (generado por train_price_model.py)."""
+    try:
+        db = get_supabase()
+
+        # Obtener el run más reciente
+        latest_run = (
+            db.table("price_forecasts")
+            .select("forecast_run_at")
+            .order("forecast_run_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if not latest_run.data:
+            return {
+                "message": (
+                    "No hay forecasts disponibles. El modelo aún no ha sido entrenado. "
+                    "Ejecuta: python -m scripts.train_price_model"
+                )
+            }
+
+        run_at = latest_run.data[0]["forecast_run_at"]
+
+        # Obtener todos los horizontes de ese run
+        result = (
+            db.table("price_forecasts")
+            .select("horizon, target_date, predicted_price, lower_bound, upper_bound, mape, data_points")
+            .eq("forecast_run_at", run_at)
+            .order("target_date", desc=False)
+            .execute()
+        )
+
+        if not result.data:
+            return {"message": "Forecast vacío."}
+
+        horizon_order = {"tomorrow": 1, "next_week": 2, "month_1": 3, "month_2": 4}
+        forecasts = sorted(result.data, key=lambda x: horizon_order.get(x["horizon"], 9))
+
+        return {
+            "forecast_generated_at": run_at,
+            "model_mape": forecasts[0].get("mape"),
+            "data_points_used": forecasts[0].get("data_points"),
+            "forecasts": forecasts,
+        }
+    except Exception as e:
+        logger.error(f"[price_monitor] error consultando forecast: {e}")
+        return {"error": str(e)}
+
+
 def _get_model_drift_status() -> dict:
     """Estado de drift del modelo (placeholder hasta tener modelo real)."""
     try:
@@ -180,6 +238,7 @@ TOOL_HANDLERS = {
     "get_price_history": _get_price_history,
     "detect_price_anomalies": _detect_price_anomalies,
     "get_model_drift_status": _get_model_drift_status,
+    "get_price_forecast": _get_price_forecast,
 }
 
 
