@@ -79,7 +79,7 @@ def save_forecasts(db, product: str, forecasts: dict, metrics: dict, n_records: 
         return
 
     db.table("demand_forecasts").insert(rows).execute()
-    logger.info(f"  ✓ {len(rows)} forecasts guardados en Supabase para '{product}'")
+    logger.info(f"  OK {len(rows)} forecasts guardados en Supabase para '{product}'")
 
 
 def get_demand_model_id(db) -> str | None:
@@ -99,7 +99,7 @@ def main():
     args = parser.parse_args()
 
     print(f"\n{'='*60}")
-    print("  ENTRENAMIENTO — Modelo de Forecasting de Demanda")
+    print("  ENTRENAMIENTO -- Modelo de Forecasting de Demanda")
     print(f"  Mínimo de puntos por producto: {args.min_points}")
     print(f"  Modo: {'DRY RUN' if args.dry_run else 'PRODUCCIÓN'}")
     print(f"{'='*60}\n")
@@ -128,11 +128,11 @@ def main():
     trainable = {p: recs for p, recs in groups.items() if len(recs) >= args.min_points}
     skipped = {p: len(recs) for p, recs in groups.items() if len(recs) < args.min_points}
 
-    print(f"Productos con suficientes datos (≥{args.min_points}): {len(trainable)}")
+    print(f"Productos con suficientes datos (>={args.min_points}): {len(trainable)}")
     if skipped:
         print(f"Productos omitidos por pocos datos: {len(skipped)}")
         for p, n in list(skipped.items())[:5]:
-            print(f"  — {p}: {n} registros")
+            print(f"  -- {p}: {n} registros")
         if len(skipped) > 5:
             print(f"  ... y {len(skipped)-5} más")
     print()
@@ -154,7 +154,7 @@ def main():
         metrics = model.train(product_records)
 
         if "error" in metrics:
-            logger.warning(f"  ✗ Error en '{product}': {metrics['error']}")
+            logger.warning(f"  X Error en '{product}': {metrics['error']}")
             total_failed += 1
             continue
 
@@ -177,7 +177,7 @@ def main():
             total_success += 1
 
         except Exception as e:
-            logger.error(f"  ✗ Predicción falló para '{product}': {e}")
+            logger.error(f"  X Predicción falló para '{product}': {e}")
             total_failed += 1
 
     # 5. Actualizar ml_models y ml_model_runs

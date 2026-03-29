@@ -42,28 +42,35 @@ FILAS DE MUESTRA (primeras {n} filas):
 {sample_rows}
 
 Identifica qué columna (usando el nombre exacto del encabezado) corresponde a:
-- date: columna con fechas de venta (obligatoria)
+- date: columna con fechas completas (formato YYYY-MM-DD, DD/MM/YYYY, etc.). Si no existe una sola columna de fecha pero hay columnas separadas de año y mes, usa null aquí.
+- year: columna con el año (ANIO, AÑO, YEAR, etc.). null si no aplica.
+- month: columna con el mes numérico (MES, MONTH, etc.). null si no aplica.
 - product: columna con nombre del producto o ítem (obligatoria)
-- quantity: columna con cantidad vendida — unidades, litros, kg, etc. (obligatoria)
+- quantity: columna con cantidad vendida — unidades, cajas, litros, kg, toneladas, etc. (obligatoria). Si hay varias columnas de cantidad, elige la más granular (cajas sobre toneladas).
 - unit_price: columna con precio unitario (opcional, null si no existe)
 - total_amount: columna con monto total de la venta (opcional, null si no existe)
 - channel: columna con canal de venta — retail, mayorista, distribuidor, etc. (opcional, null si no existe)
 - region: columna con región geográfica, zona o ciudad (opcional, null si no existe)
 
+IMPORTANTE sobre números: algunas hojas usan coma como separador de miles (ej: "2,522" = dos mil quinientos veintidós). Indica si este es el caso en _thousands_sep.
+
 Devuelve ÚNICAMENTE un objeto JSON con este formato exacto:
 {{
   "date": "<nombre_columna_o_null>",
+  "year": "<nombre_columna_o_null>",
+  "month": "<nombre_columna_o_null>",
   "product": "<nombre_columna_o_null>",
   "quantity": "<nombre_columna_o_null>",
   "unit_price": "<nombre_columna_o_null>",
   "total_amount": "<nombre_columna_o_null>",
   "channel": "<nombre_columna_o_null>",
   "region": "<nombre_columna_o_null>",
-  "_unit": "<unidad de la cantidad detectada: units/kg/liters/boxes/other>",
+  "_unit": "<unidad de la cantidad: units/kg/liters/boxes/tons/other>",
+  "_thousands_sep": true,
   "_reasoning": "<explicación breve de tus decisiones>"
 }}
 
-Si no puedes identificar una columna obligatoria (date, product, quantity), devuelve null para ese campo.
+Si no puedes identificar product o quantity, devuelve null para ese campo.
 No inventes columnas — usa solo los nombres exactos que aparecen en los encabezados."""
 
 
@@ -157,7 +164,7 @@ def _parse_date(value) -> str | None:
     """Convierte cualquier formato de fecha a ISO (YYYY-MM-DD)."""
     if value is None:
         return None
-    if isinstance(value, (datetime,)):
+    if isinstance(value, datetime):
         return value.date().isoformat()
     if hasattr(value, "isoformat"):  # date object
         return value.isoformat()
@@ -166,7 +173,6 @@ def _parse_date(value) -> str | None:
     if not s or s.lower() in ("none", "null", "nan"):
         return None
 
-    # Intentar formatos comunes
     formats = [
         "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y",
         "%d-%m-%Y", "%Y/%m/%d", "%d.%m.%Y",
@@ -182,15 +188,35 @@ def _parse_date(value) -> str | None:
     return None
 
 
-def _parse_number(value) -> float | None:
-    """Convierte a float, maneja comas como separador decimal."""
+def _build_date_from_year_month(year_val, month_val) -> str | None:
+    """Construye una fecha ISO desde columnas separadas de año y mes."""
+    try:
+        year = int(str(year_val).strip().split(".")[0])
+        month = int(str(month_val).strip().split(".")[0])
+        if 1 <= month <= 12 and 1990 <= year <= 2100:
+            return f"{year:04d}-{month:02d}-01"
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
+def _parse_number(value, thousands_sep: bool = False) -> float | None:
+    """
+    Convierte a float.
+    thousands_sep=True: la coma es separador de miles (2,522 -> 2522).
+    thousands_sep=False: la coma es separador decimal (2,52 -> 2.52).
+    """
     if value is None:
         return None
     if isinstance(value, (int, float)):
         return float(value) if value == value else None  # NaN check
-    s = str(value).strip().replace(",", ".").replace(" ", "")
+    s = str(value).strip().replace(" ", "")
     if not s or s.lower() in ("none", "null", "nan", "-"):
         return None
+    if thousands_sep:
+        s = s.replace(",", "")   # 2,522 -> 2522
+    else:
+        s = s.replace(",", ".")  # 2,52 -> 2.52
     try:
         return float(s)
     except ValueError:
@@ -205,9 +231,10 @@ def normalize_rows(
 ) -> list[dict]:
     """
     Convierte las filas crudas al esquema estándar de sales_data.
-    Usa el mapeo detectado por Claude.
+    Maneja fechas únicas, fechas separadas año/mes, y miles con coma.
     """
     col_idx = {col: headers.index(col) for col in headers}
+    thousands_sep = bool(mapping.get("_thousands_sep", False))
 
     def get(row, field_name):
         col = mapping.get(field_name)
@@ -220,11 +247,17 @@ def normalize_rows(
     skipped = 0
 
     for i, row in enumerate(data_rows):
-        date_val = _parse_date(get(row, "date"))
-        product_val = str(get(row, "product") or "").strip()
-        qty_val = _parse_number(get(row, "quantity"))
+        # ── Fecha ────────────────────────────────────────────
+        if mapping.get("date"):
+            date_val = _parse_date(get(row, "date"))
+        elif mapping.get("year") and mapping.get("month"):
+            date_val = _build_date_from_year_month(get(row, "year"), get(row, "month"))
+        else:
+            date_val = None
 
-        # Saltar filas sin los 3 campos obligatorios
+        product_val = str(get(row, "product") or "").strip()
+        qty_val = _parse_number(get(row, "quantity"), thousands_sep=thousands_sep)
+
         if not date_val or not product_val or qty_val is None:
             skipped += 1
             continue
@@ -233,14 +266,17 @@ def normalize_rows(
             "date": date_val,
             "product_name": product_val,
             "quantity": qty_val,
-            "unit_price": _parse_number(get(row, "unit_price")),
-            "total_amount": _parse_number(get(row, "total_amount")),
+            "unit_price": _parse_number(get(row, "unit_price"), thousands_sep=thousands_sep),
+            "total_amount": _parse_number(get(row, "total_amount"), thousands_sep=thousands_sep),
             "channel": str(get(row, "channel") or "").strip() or None,
             "region": str(get(row, "region") or "").strip() or None,
-            "metadata": {"source_file": filename, "row_index": i + 2},
+            "metadata": {
+                "source_file": filename,
+                "row_index": i + 2,
+                "unit": mapping.get("_unit", "units"),
+            },
         }
 
-        # Calcular total si falta pero hay precio y cantidad
         if record["total_amount"] is None and record["unit_price"] and record["quantity"]:
             record["total_amount"] = round(record["unit_price"] * record["quantity"], 4)
 
@@ -325,21 +361,29 @@ def main():
 
     # 1. Leer archivo
     headers, data_rows = read_file(file_path)
-    print(f"✓ Archivo leído: {len(data_rows):,} filas, {len(headers)} columnas")
+    print(f"OK Archivo leído: {len(data_rows):,} filas, {len(headers)} columnas")
     print(f"  Columnas encontradas: {headers}\n")
 
     # 2. Detectar columnas con Claude
     mapping = detect_columns(headers, data_rows[:10], filename)
-    print("✓ Columnas detectadas por Claude:")
+    print("OK Columnas detectadas por Claude:")
     for field, col in mapping.items():
         if not field.startswith("_"):
-            status = "✓" if col else "—"
-            print(f"  {status} {field:15} → {col or '(no encontrado)'}")
+            status = "OK" if col else "—"
+            print(f"  {status} {field:15} -> {col or '(no encontrado)'}")
     print(f"\n  Unidad detectada: {mapping.get('_unit', 'desconocida')}")
     print(f"  Razonamiento: {mapping.get('_reasoning', '')}\n")
 
     # Verificar campos obligatorios
-    missing = [f for f in ("date", "product", "quantity") if not mapping.get(f)]
+    # Para fecha: puede ser columna única (date) o año+mes (year+month)
+    has_date = mapping.get("date") or (mapping.get("year") and mapping.get("month"))
+    missing = []
+    if not has_date:
+        missing.append("date (o year+month)")
+    if not mapping.get("product"):
+        missing.append("product")
+    if not mapping.get("quantity"):
+        missing.append("quantity")
     if missing:
         logger.error(f"No se detectaron columnas obligatorias: {missing}")
         logger.error("Verifica que el archivo tenga columnas de fecha, producto y cantidad.")
@@ -347,7 +391,7 @@ def main():
 
     # 3. Normalizar filas
     records = normalize_rows(headers, data_rows, mapping, filename)
-    print(f"✓ Filas normalizadas: {len(records):,}")
+    print(f"OK Filas normalizadas: {len(records):,}")
 
     # Mostrar muestra
     if records:
@@ -361,9 +405,9 @@ def main():
     result = save_to_supabase(records, mapping, filename, dry_run=args.dry_run)
 
     if args.dry_run:
-        print(f"✓ DRY RUN completado — se importarían {result['rows_would_import']:,} filas")
+        print(f"OK DRY RUN completado — se importarían {result['rows_would_import']:,} filas")
     else:
-        print(f"✓ Importación completada: {result['rows_imported']:,} filas en Supabase")
+        print(f"OK Importación completada: {result['rows_imported']:,} filas en Supabase")
 
     print(f"\n  Productos encontrados ({len(result.get('products_found', []))}):")
     for p in sorted(result.get("products_found", []))[:20]:
