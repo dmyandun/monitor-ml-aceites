@@ -15,3 +15,7 @@ models/
 *.xlsx
 *.xls
 .pytest_cache/
+requirements-ml.txt
+requirements-cron.txt
+scripts/
+data/
