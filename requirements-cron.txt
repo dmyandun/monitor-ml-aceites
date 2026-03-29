@@ -9,5 +9,5 @@
 # Incluye requirements.txt base + librerías de scraping/research
 -r requirements.txt
 
-# Scraping de noticias de mercado (research_pipeline.py)
-duckduckgo-search>=6.0.0
+# Scraping de noticias y precios de mercado (research_pipeline.py)
+ddgs>=0.1.0

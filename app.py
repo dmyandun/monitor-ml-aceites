@@ -373,7 +373,7 @@ def dashboard():
         <div class="node">
           <div class="node-icon">📈</div>
           <div class="node-name">Monitor de Precios</div>
-          <div class="node-desc">Forecasting de precios<br>aceite de palma</div>
+          <div class="node-desc">Forecasting de precios<br>de commodities</div>
           <div class="node-pills">
             <span class="pill pill-green">Sonnet 4.6</span>
             <span class="pill pill-blue" id="calls-price_monitor">0 consultas</span>

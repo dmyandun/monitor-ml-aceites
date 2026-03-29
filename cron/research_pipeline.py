@@ -160,69 +160,105 @@ async def score_relevance(title: str, summary: str) -> float:
         return 0.0
 
 
-async def fetch_daily_cpo_price(dry_run: bool = False) -> str:
-    """Paso 0: fetch precio diario CPO si COMMODITIES_API_KEY está configurada."""
-    api_key = os.environ.get("COMMODITIES_API_KEY", "")
-    if not api_key:
-        return "COMMODITIES_API_KEY no configurada — omitiendo fetch de precio diario"
+COMMODITIES = [
+    {"name": "palm_oil",     "symbol": "CPO",  "queries": ["crude palm oil CPO price USD metric ton today", "palm oil futures price USD today"]},
+    {"name": "pko",          "symbol": "PKO",  "queries": ["palm kernel oil PKO price USD metric ton today"]},
+    {"name": "sunflower_oil","symbol": "SFO",  "queries": ["sunflower oil price USD metric ton today 2026"]},
+    {"name": "soybean_oil",  "symbol": "SBO",  "queries": ["soybean oil price USD metric ton today 2026"]},
+    {"name": "corn_oil",     "symbol": "CNO",  "queries": ["corn oil price USD metric ton today 2026"]},
+    {"name": "achiote",      "symbol": "ANN",  "queries": ["annatto achiote price USD kg today", "bixin annatto extract price USD 2026"]},
+]
 
+import re as _re
+
+def _extract_price_from_text(text: str, expected_range: tuple = (100, 3000)) -> float | None:
+    """Extrae el primer precio USD/MT encontrado en un texto de búsqueda."""
+    patterns = [
+        r'\$\s*([\d,]+(?:\.\d+)?)\s*(?:per\s+)?(?:metric\s+)?(?:ton|MT|tonne)',
+        r'([\d,]+(?:\.\d+)?)\s*(?:USD|US\$)\s*(?:per\s+)?(?:metric\s+)?(?:ton|MT)',
+        r'price[^$\d]*([\d,]+(?:\.\d+)?)',
+        r'([\d,]+\.\d+)',
+    ]
+    for pattern in patterns:
+        matches = _re.findall(pattern, text, _re.IGNORECASE)
+        for m in matches:
+            try:
+                val = float(m.replace(",", ""))
+                if expected_range[0] <= val <= expected_range[1]:
+                    return round(val, 2)
+            except ValueError:
+                continue
+    return None
+
+
+async def fetch_commodity_prices(dry_run: bool = False) -> str:
+    """Paso 0: fetch precios diarios de commodities relevantes via DuckDuckGo."""
     try:
-        url = "https://commodities-api.com/api/latest"
-        params = {"access_key": api_key, "base": "USD", "symbols": "CPO"}
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(url, params=params)
-            resp.raise_for_status()
-            data = resp.json()
+        from ddgs import DDGS
+    except ImportError:
+        return "ddgs no instalado — omitiendo fetch de precios"
 
-        if not data.get("success"):
-            error = data.get("error", {})
-            return f"API error: {error.get('type')} — {error.get('info')}"
+    from datetime import date
+    results_log = []
 
-        rate = data["data"]["rates"].get("CPO")
-        if not rate:
-            return "CPO no encontrado en respuesta"
+    for commodity in COMMODITIES:
+        price = None
+        source_snippet = ""
 
-        # Normalizar a USD/MT (precio palma ~$600-1200)
-        if 400 <= rate <= 1500:
-            price = rate
-        elif 0 < rate < 1:
-            price = 1.0 / rate
+        try:
+            with DDGS() as ddgs:
+                for query in commodity["queries"]:
+                    if price:
+                        break
+                    snippets = list(ddgs.text(query, max_results=4))
+                    for s in snippets:
+                        text = s.get("title", "") + " " + s.get("body", "")
+                        price = _extract_price_from_text(text)
+                        if price:
+                            source_snippet = s.get("title", "")[:60]
+                            break
+        except Exception as e:
+            logger.warning(f"  Error buscando {commodity['name']}: {e}")
+            continue
+
+        if price:
+            results_log.append(f"{commodity['symbol']}: ${price}/MT")
+            if not dry_run:
+                try:
+                    from database.supabase_client import get_supabase
+                    db = get_supabase()
+                    db.table("price_data").upsert({
+                        "date": date.today().isoformat(),
+                        "actual_price": price,
+                        "commodity": commodity["name"],
+                        "source": "ddgs",
+                        "currency": "USD",
+                        "unit": "USD/MT",
+                    }, on_conflict="date,commodity").execute()
+                except Exception as e:
+                    logger.warning(f"  Error guardando {commodity['name']}: {e}")
         else:
-            price = rate
+            results_log.append(f"{commodity['symbol']}: sin precio")
+            logger.warning(f"  No se pudo extraer precio para {commodity['name']}")
 
-        price = round(price, 2)
-
-        if not dry_run:
-            from database.supabase_client import get_supabase
-            db = get_supabase()
-            from datetime import date
-            db.table("price_data").upsert({
-                "date": date.today().isoformat(),
-                "actual_price": price,
-                "source": "commodities-api",
-                "currency": "USD",
-                "unit": "USD/MT",
-            }, on_conflict="date,source").execute()
-
-        return f"Precio CPO hoy: ${price} USD/MT (guardado en price_data)"
-
-    except Exception as e:
-        return f"Error fetch precio: {e}"
+    return "Precios commodities: " + " | ".join(results_log)
 
 
-async def fetch_palm_oil_news() -> list[dict]:
+async def fetch_commodity_news() -> list[dict]:
     """
-    Busca noticias recientes sobre precio de aceite de palma usando DuckDuckGo.
-    Sin API key. Búsqueda en inglés para máxima cobertura.
+    Busca noticias recientes sobre commodities relevantes (palma, PKO, girasol, soya, maiz, achiote).
+    Sin API key. Busqueda en ingles para maxima cobertura.
     """
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
 
         queries = [
-            "palm oil price forecast 2025",
-            "crude palm oil CPO market news",
-            "Malaysia Indonesia palm oil production export",
+            "crude palm oil CPO price market news",
+            "Malaysia Indonesia palm oil production export 2026",
             "palm oil biofuel policy demand",
+            "palm kernel oil PKO market",
+            "soybean oil sunflower oil price 2026",
+            "vegetable oil commodities market outlook",
         ]
 
         all_results = []
@@ -231,7 +267,7 @@ async def fetch_palm_oil_news() -> list[dict]:
         with DDGS() as ddgs:
             for query in queries:
                 try:
-                    results = ddgs.news(keywords=query, max_results=5, timelimit="m")  # último mes
+                    results = list(ddgs.news(keywords=query, max_results=4, timelimit="m"))
                     for r in results:
                         url = r.get("url", "")
                         if url and url not in seen_urls:
@@ -246,14 +282,14 @@ async def fetch_palm_oil_news() -> list[dict]:
                 except Exception as e:
                     logger.warning(f"Error buscando '{query}': {e}")
 
-        logger.info(f"Noticias de palma encontradas: {len(all_results)}")
+        logger.info(f"Noticias commodities encontradas: {len(all_results)}")
         return all_results
 
     except ImportError:
-        logger.warning("duckduckgo-search no instalado. Omitiendo paso de noticias de palma.")
+        logger.warning("ddgs no instalado. Omitiendo paso de noticias.")
         return []
     except Exception as e:
-        logger.warning(f"Error en fetch_palm_oil_news: {e}")
+        logger.warning(f"Error en fetch_commodity_news: {e}")
         return []
 
 
@@ -288,7 +324,7 @@ async def run_palm_oil_events_step(dry_run: bool = False) -> int:
     Paso 7: Scraping de noticias de palma + clasificación + guardado en market_events.
     Retorna número de eventos guardados.
     """
-    articles = await fetch_palm_oil_news()
+    articles = await fetch_commodity_news()
     if not articles:
         return 0
 
@@ -354,9 +390,9 @@ async def run_pipeline(dry_run: bool = False):
     from database.supabase_client import get_supabase
     db = get_supabase() if not dry_run else None
 
-    # 0. PRECIO DIARIO CPO
-    logger.info("PASO 0: Fetch precio diario CPO...")
-    price_result = await fetch_daily_cpo_price(dry_run=dry_run)
+    # 0. PRECIOS DIARIOS COMMODITIES
+    logger.info("PASO 0: Fetch precios commodities (DuckDuckGo)...")
+    price_result = await fetch_commodity_prices(dry_run=dry_run)
     logger.info(f"  {price_result}")
 
     # 1. SCRAPE
@@ -420,8 +456,8 @@ async def run_pipeline(dry_run: bool = False):
     else:
         lab_report = "[dry-run: Agent Lab omitido]"
 
-    # 7. EVENTOS MERCADO PALMA
-    logger.info("PASO 7: Scraping noticias de palma (DuckDuckGo + clasificación Claude)...")
+    # 7. EVENTOS MERCADO COMMODITIES
+    logger.info("PASO 7: Scraping noticias commodities (DuckDuckGo + clasificacion Claude)...")
     events_saved = await run_palm_oil_events_step(dry_run=dry_run)
     logger.info(f"Eventos de mercado guardados: {events_saved}")
 
