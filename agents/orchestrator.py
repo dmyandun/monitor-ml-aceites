@@ -38,6 +38,13 @@ AGENT_REGISTRY: list[AgentRoute] = [
             "tendencia", "trend", "forecast", "pron\u00f3stico", "pronostico",
             "fred", "world bank", "imf", "mercado", "mercados", "coste", "costo",
             "barrel", "tonel", "usd", "d\u00f3lar", "dolar",
+            # Commodities adicionales
+            "girasol", "sunflower", "sfo",
+            "soya", "soja", "soybean", "sbo",
+            "ma\u00edz", "maiz", "corn", "cno",
+            "achiote", "annatto", "ann",
+            "palmiste", "palmiste", "pko",
+            "cpo", "crudo",
         ],
         weight=1.2,
     ),
@@ -70,7 +77,7 @@ ORCHESTRATOR_SYSTEM_PROMPT = """Eres el clasificador de intents del sistema moni
 Tu única tarea es determinar a qué agente debe ir el mensaje del usuario.
 
 Agentes disponibles:
-- price_monitor: preguntas sobre precios del aceite de palma, forecasting de precios, tendencias de mercado
+- price_monitor: preguntas sobre precios de commodities (palma, girasol, soya, maíz, achiote, palmiste), forecasting de precios, tendencias de mercado
 - demand_monitor: preguntas sobre ventas, demanda, inventario, producción, canales de distribución
 - agent_lab: gestión del sistema de agentes, recomendaciones, mejoras, estado del sistema
 
