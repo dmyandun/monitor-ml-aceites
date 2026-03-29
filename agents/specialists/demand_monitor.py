@@ -25,22 +25,27 @@ logger = logging.getLogger(__name__)
 SYSTEM_PROMPT = """Eres el agente monitor del modelo de forecasting de demanda y ventas.
 
 Tu rol:
-- Reportar el estado del modelo de predicción de demanda de productos
+- Reportar proyecciones de demanda por producto para los próximos días, semanas y meses
 - Analizar patrones de ventas por producto, canal y región
 - Alertar sobre desviaciones entre demanda prevista y real
 - Monitorear niveles de inventario y riesgo de desabasto
-- En el futuro, analizar datos reales de ventas del negocio (Excel)
+- Ayudar en la planificación de compras y producción con base en los forecasts
 
 El negocio es una empresa ecuatoriana que produce y vende:
   - Aceites comestibles (palma, girasol, soya, maíz)
   - Mantecas
   - Otros productos derivados
 
-Los datos actuales provienen del dataset FMCG Kaggle como proxy.
-En el futuro se usarán datos reales en formato Excel plano.
+Los datos de ventas provienen del Excel real del negocio, importado localmente.
+Los forecasts los genera Prophet y se almacenan en Supabase.
 
-Cuando reportes, incluye números específicos y comparaciones con períodos anteriores.
-Responde siempre en español."""
+FLUJO DE RESPUESTA PARA PREGUNTAS DE PROYECCIÓN:
+1. Usa get_demand_forecast para obtener las predicciones Prophet del producto consultado
+2. Usa get_sales_summary para dar contexto de ventas históricas recientes
+3. Combina ambos para dar una respuesta accionable: qué se espera vender y qué implica para compras/producción
+
+Si no hay forecasts disponibles, indica que primero hay que importar el Excel y entrenar el modelo.
+Responde siempre en español con números concretos."""
 
 TOOLS = [
     {
@@ -100,6 +105,40 @@ TOOLS = [
                 },
             },
             "required": ["file_path"],
+        },
+    },
+    {
+        "name": "get_demand_forecast",
+        "description": "Obtiene las proyecciones de demanda Prophet del run más reciente. Filtra por producto si se especifica.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "product": {
+                    "type": "string",
+                    "description": "Nombre del producto a consultar. Si es vacío, retorna todos los productos.",
+                    "default": "",
+                },
+                "horizon": {
+                    "type": "string",
+                    "enum": ["week_1", "month_1", "month_2", "month_3", "all"],
+                    "description": "Horizonte de predicción a retornar.",
+                    "default": "all",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_top_products",
+        "description": "Lista los productos con más datos de ventas y sus últimas proyecciones.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Número de productos a retornar.",
+                    "default": 10,
+                }
+            },
         },
     },
 ]
@@ -222,11 +261,91 @@ def _get_demand_model_id() -> str:
     return "00000000-0000-0000-0000-000000000001"
 
 
+def _get_demand_forecast(product: str = "", horizon: str = "all") -> dict:
+    """Lee el run más reciente de demand_forecasts, filtra por producto y horizonte."""
+    try:
+        db = get_supabase()
+
+        # Obtener el run_at más reciente
+        latest = db.table("demand_forecasts").select("forecast_run_at").order(
+            "forecast_run_at", desc=True
+        ).limit(1).execute()
+
+        if not latest.data:
+            return {
+                "message": "No hay forecasts de demanda disponibles.",
+                "next_step": "Importa tu Excel y ejecuta: python -m scripts.train_demand_model",
+            }
+
+        run_at = latest.data[0]["forecast_run_at"]
+
+        query = db.table("demand_forecasts").select(
+            "product, horizon, target_date, predicted_qty, lower_bound, upper_bound, mape, data_points"
+        ).eq("forecast_run_at", run_at)
+
+        if product:
+            query = query.ilike("product", f"%{product}%")
+        if horizon != "all":
+            query = query.eq("horizon", horizon)
+
+        result = query.order("product").order("horizon").execute()
+
+        if not result.data:
+            return {
+                "message": f"No se encontraron forecasts para producto='{product}'.",
+                "hint": "Usa get_top_products para ver qué productos tienen forecasts.",
+            }
+
+        return {
+            "forecast_run_at": run_at,
+            "forecasts": result.data,
+            "count": len(result.data),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _get_top_products(limit: int = 10) -> dict:
+    """Lista productos con más datos de ventas y sus forecasts más recientes."""
+    try:
+        db = get_supabase()
+
+        # Productos con más registros de ventas
+        sales = db.table("sales_data").select(
+            "product_name, quantity"
+        ).execute()
+
+        if not sales.data:
+            return {"message": "No hay datos de ventas importados aún."}
+
+        from collections import Counter
+        counts = Counter(r["product_name"] for r in sales.data if r.get("product_name"))
+        top = counts.most_common(limit)
+
+        # Forecasts disponibles para esos productos
+        latest = db.table("demand_forecasts").select("forecast_run_at").order(
+            "forecast_run_at", desc=True
+        ).limit(1).execute()
+
+        has_forecasts = bool(latest.data)
+
+        return {
+            "top_products": [{"product": p, "sales_records": n} for p, n in top],
+            "has_forecasts": has_forecasts,
+            "total_products": len(counts),
+            "forecast_run_at": latest.data[0]["forecast_run_at"] if has_forecasts else None,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 TOOL_HANDLERS = {
     "get_demand_metrics": _get_demand_metrics,
     "get_sales_summary": _get_sales_summary,
     "get_inventory_status": _get_inventory_status,
     "import_excel_data": _import_excel_data,
+    "get_demand_forecast": _get_demand_forecast,
+    "get_top_products": _get_top_products,
 }
 
 

@@ -17,3 +17,6 @@ pandas>=2.2.0
 numpy>=1.26.0
 scikit-learn>=1.5.0
 prophet>=1.1.5
+
+# Lectura de Excel (import_excel.py)
+openpyxl>=3.1.0
