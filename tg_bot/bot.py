@@ -62,7 +62,8 @@ class TelegramBot:
             user_name = update.message.from_user.first_name or "usuario"
             text = update.message.text.strip()
 
-            logger.info(f"[TelegramBot] mensaje de {user_name} ({user_id}): {text[:60]}")
+            masked_id = f"{str(user_id)[:3]}***{str(user_id)[-2:]}"
+            logger.info(f"[TelegramBot] mensaje de {user_name} ({masked_id}): {text[:60]}")
 
             # Comandos especiales
             if text.startswith("/"):
