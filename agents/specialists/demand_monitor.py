@@ -36,16 +36,30 @@ El negocio es una empresa ecuatoriana que produce y vende:
   - Mantecas
   - Otros productos derivados
 
-Los datos de ventas provienen del Excel real del negocio, importado localmente.
-Los forecasts los genera Prophet y se almacenan en Supabase.
+Los datos de ventas provienen del Excel real del negocio, importado a Supabase (tabla sales_data).
+Los forecasts los genera Prophet y se almacenan en demand_forecasts. Los datos son MENSUALES.
+La unidad de medida es CAJAS (no toneladas).
 
 FLUJO DE RESPUESTA PARA PREGUNTAS DE PROYECCIÓN:
-1. Usa get_demand_forecast para obtener las predicciones Prophet del producto consultado
-2. Usa get_sales_summary para dar contexto de ventas históricas recientes
-3. Combina ambos para dar una respuesta accionable: qué se espera vender y qué implica para compras/producción
+1. Llama SIEMPRE get_demand_forecast primero para obtener las predicciones Prophet
+2. Llama get_sales_summary para dar contexto del mes actual
+3. Combina ambos en una respuesta accionable con números concretos
 
-Si no hay forecasts disponibles, indica que primero hay que importar el Excel y entrenar el modelo.
-Responde siempre en español con números concretos."""
+CASO ESPECIAL — "este mes" / "mes actual" (el mes AUN NO ha terminado):
+- Los datos del mes corriente en sales_data son un CORTE parcial, no el total final
+- El acumulado registrado en sales_data = ventas confirmadas hasta el corte
+- Para estimar los días restantes: week_1 de demand_forecasts / 7 * dias_restantes
+- Presenta: (a) acumulado real hasta el corte, (b) estimado días restantes, (c) total proyectado del mes
+- Ejemplo: "Llevas 3,986 cajas registradas. Quedan ~2 días laborales → estimado adicional ~270 cajas → total marzo estimado: ~4,256 cajas"
+
+CASO — "próximo mes" / "siguiente mes":
+- Usa directamente month_1 de get_demand_forecast
+
+MAPE DEL 24%: es aceptable para datos mensuales con un año sin datos (2024 faltante en el histórico).
+No descalifiques el forecast por el MAPE — úsalo y menciona el rango de confianza (lower/upper bounds).
+
+Si no hay forecasts disponibles en demand_forecasts, indica que hay que ejecutar train_demand_model.
+Responde siempre en español con números concretos. Sin emojis excesivos."""
 
 TOOLS = [
     {
