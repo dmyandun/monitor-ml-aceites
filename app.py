@@ -171,21 +171,21 @@ def dashboard():
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* ── Fondo N8N: oscuro con grid de puntos ── */
+    /* ── Fondo sobrio oscuro con grid de puntos ── */
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background-color: #0d0d12;
-      background-image: radial-gradient(circle, #1e1e2e 1px, transparent 1px);
+      background-color: #1a1a1a;
+      background-image: radial-gradient(circle, #2a2a2a 1px, transparent 1px);
       background-size: 28px 28px;
-      color: #e2e8f0;
+      color: #d4d4d4;
       min-height: 100vh;
     }
 
     /* ── Header ── */
     header {
-      background: rgba(16,16,24,0.92);
+      background: rgba(22,22,22,0.96);
       backdrop-filter: blur(8px);
-      border-bottom: 1px solid #1e1e30;
+      border-bottom: 1px solid #2e2e2e;
       padding: 14px 28px;
       display: flex;
       align-items: center;
@@ -193,51 +193,51 @@ def dashboard():
       position: sticky; top: 0; z-index: 10;
     }
     .header-brand { display: flex; align-items: center; gap: 10px; }
-    .header-brand h1 { font-size: 1.05rem; font-weight: 700; color: #e2e8f0; letter-spacing: -.01em; }
+    .header-brand h1 { font-size: 1.05rem; font-weight: 700; color: #e0e0e0; letter-spacing: -.01em; }
     .header-brand .tag { font-size: 0.68rem; background: #1a3326; color: #68d391;
                          border: 1px solid #276749; border-radius: 20px; padding: 2px 8px; }
     .status-pill { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #68d391; }
     .dot { width: 7px; height: 7px; border-radius: 50%; background: #68d391; animation: blink 2s infinite; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
-    .refresh-ts { font-size: 0.68rem; color: #3a3a55; margin-top: 2px; }
+    .refresh-ts { font-size: 0.68rem; color: #555; margin-top: 2px; }
 
     /* ── Layout ── */
     main { padding: 32px 24px; max-width: 960px; margin: 0 auto; }
     .section-label {
-      font-size: 0.68rem; font-weight: 700; color: #3a3a6a;
+      font-size: 0.68rem; font-weight: 700; color: #555;
       text-transform: uppercase; letter-spacing: .12em; margin-bottom: 20px;
     }
 
     /* ── Nodo base ── */
     .node {
-      background: #13131e;
-      border: 1px solid #22223a;
+      background: #242424;
+      border: 1px solid #363636;
       border-radius: 14px;
       padding: 18px 20px;
       text-align: center;
       width: 200px;
-      box-shadow: 0 4px 32px rgba(0,0,0,.5);
+      box-shadow: 0 4px 24px rgba(0,0,0,.4);
       transition: border-color .2s, box-shadow .2s;
     }
-    .node:hover { border-color: #35355a; box-shadow: 0 8px 40px rgba(0,0,0,.7); }
+    .node:hover { border-color: #484848; box-shadow: 0 8px 32px rgba(0,0,0,.6); }
     .node-icon { font-size: 1.8rem; margin-bottom: 8px; }
     .node-name { font-size: 0.82rem; font-weight: 700; font-family: 'SF Mono', monospace;
-                 color: #c8c8e8; margin-bottom: 4px; }
-    .node-desc { font-size: 0.68rem; color: #44445a; line-height: 1.5; margin-bottom: 10px; }
+                 color: #c8c8c8; margin-bottom: 4px; }
+    .node-desc { font-size: 0.68rem; color: #666; line-height: 1.5; margin-bottom: 10px; }
     .node-pills { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; }
     .pill { font-size: 0.62rem; font-weight: 600; padding: 2px 7px;
             border-radius: 20px; }
     .pill-green { background: #0e2a1a; color: #68d391; border: 1px solid #1a4a2e; }
-    .pill-blue  { background: #0e1a2a; color: #90cdf4; border: 1px solid #1a2e4a; }
+    .pill-blue  { background: #1a2535; color: #90cdf4; border: 1px solid #1e3a55; }
 
     /* ── Nodo raíz especial ── */
     .node-root {
       width: 230px;
       border-color: #276749;
-      box-shadow: 0 0 0 1px #276749, 0 0 40px rgba(104,211,145,.12), 0 4px 32px rgba(0,0,0,.5);
+      box-shadow: 0 0 0 1px #276749, 0 0 40px rgba(104,211,145,.10), 0 4px 24px rgba(0,0,0,.4);
     }
     .node-root .node-name { color: #68d391; }
-    .node-root:hover { box-shadow: 0 0 0 1px #38a169, 0 0 50px rgba(104,211,145,.2), 0 8px 40px rgba(0,0,0,.7); }
+    .node-root:hover { box-shadow: 0 0 0 1px #38a169, 0 0 50px rgba(104,211,145,.18), 0 8px 32px rgba(0,0,0,.6); }
 
     /* ── Árbol jerárquico ── */
     .tree { display: flex; flex-direction: column; align-items: center; }
@@ -274,33 +274,33 @@ def dashboard():
     .cards-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 32px; }
     @media(max-width:600px){ .cards-row { grid-template-columns: 1fr; } }
     .card {
-      background: #13131e; border: 1px solid #1e1e30;
+      background: #242424; border: 1px solid #363636;
       border-radius: 14px; padding: 20px;
-      box-shadow: 0 4px 24px rgba(0,0,0,.4);
+      box-shadow: 0 4px 16px rgba(0,0,0,.3);
     }
-    .card-title { font-size: 0.7rem; font-weight: 700; color: #3a3a6a;
+    .card-title { font-size: 0.7rem; font-weight: 700; color: #555;
                   text-transform: uppercase; letter-spacing: .1em; margin-bottom: 14px; }
     .metric { display: flex; justify-content: space-between; align-items: center;
-              padding: 7px 0; border-bottom: 1px solid #1a1a2a; font-size: 0.82rem; color: #6060a0; }
+              padding: 7px 0; border-bottom: 1px solid #2e2e2e; font-size: 0.82rem; color: #888; }
     .metric:last-child { border-bottom: none; }
     .metric-val { font-weight: 600; color: #90cdf4; font-size: 0.8rem; }
     .badge { display: inline-block; padding: 2px 7px; border-radius: 20px;
              font-size: 0.65rem; font-weight: 600; }
     .badge-green { background: #0e2a1a; color: #68d391; border: 1px solid #1a4a2e; }
     .badge-yellow { background: #2a1e00; color: #f6c90e; border: 1px solid #4a3800; }
-    .rec-item { padding: 8px 0; border-bottom: 1px solid #1a1a2a; font-size: 0.8rem; color: #5050a0; }
+    .rec-item { padding: 8px 0; border-bottom: 1px solid #2e2e2e; font-size: 0.8rem; color: #888; }
     .rec-item:last-child { border-bottom: none; }
     .rec-agent { color: #90cdf4; font-weight: 600; }
-    .empty { color: #2a2a4a; font-size: 0.82rem; padding: 10px 0; text-align: center; }
+    .empty { color: #444; font-size: 0.82rem; padding: 10px 0; text-align: center; }
 
     /* ── Pipeline ── */
     .pipeline-wrap { margin-top: 20px; }
     .pipeline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-    .pipe-step { background: #13131e; border: 1px solid #1e1e30; border-radius: 8px;
-                 padding: 5px 11px; font-size: 0.72rem; color: #3a3a6a; }
-    .pipe-step.on { border-color: #1a4a2e; color: #68d391; background: #0a1a10; }
+    .pipe-step { background: #242424; border: 1px solid #363636; border-radius: 8px;
+                 padding: 5px 11px; font-size: 0.72rem; color: #555; }
+    .pipe-step.on { border-color: #1a4a2e; color: #68d391; background: #0e1f14; }
     .pipe-step.soon { border-color: #4a3800; color: #f6c90e; background: #1a1400; }
-    .pipe-arrow { color: #1e1e30; font-size: 0.8rem; }
+    .pipe-arrow { color: #3a3a3a; font-size: 0.8rem; }
 
     /* ── Panel desplegable ── */
     .panel-toggle {
@@ -308,19 +308,19 @@ def dashboard():
       cursor: pointer; user-select: none; width: fit-content;
     }
     .panel-toggle-label {
-      font-size: 0.68rem; font-weight: 700; color: #3a3a6a;
+      font-size: 0.68rem; font-weight: 700; color: #555;
       text-transform: uppercase; letter-spacing: .12em;
     }
     .panel-toggle-icon {
-      font-size: 0.72rem; color: #3a3a6a; transition: transform .25s;
+      font-size: 0.72rem; color: #555; transition: transform .25s;
     }
     .panel-toggle-icon.open { transform: rotate(180deg); }
     .panel-body { display: none; }
     .panel-body.open { display: block; }
 
     /* ── Footer ── */
-    .footer { margin-top: 36px; font-size: 0.68rem; color: #22223a; }
-    .footer a { color: #2a2a4a; text-decoration: none; }
+    .footer { margin-top: 36px; font-size: 0.68rem; color: #444; }
+    .footer a { color: #555; text-decoration: none; }
     .footer a:hover { color: #68d391; }
   </style>
 </head>
@@ -344,18 +344,18 @@ def dashboard():
 <main>
 
   <!-- Árbol de agentes -->
-  <div class="section-label">Arquitectura multiagente</div>
+  <div class="section-label">Arquitectura Multiagente</div>
   <div class="tree">
 
     <!-- Raíz -->
     <div class="tree-root-row">
       <div class="node node-root">
         <div class="node-icon">🔀</div>
-        <div class="node-name">orchestrator</div>
-        <div class="node-desc">Clasifica intents y<br>enruta al especialista</div>
+        <div class="node-name">Orquestador</div>
+        <div class="node-desc">Clasifica mensajes y<br>enruta al especialista</div>
         <div class="node-pills">
           <span class="pill pill-green">Haiku 4.5</span>
-          <span class="pill pill-blue" id="calls-orchestrator">0 calls</span>
+          <span class="pill pill-blue" id="calls-orchestrator">0 mensajes</span>
         </div>
       </div>
     </div>
@@ -372,11 +372,11 @@ def dashboard():
         <div class="conn-stem"></div>
         <div class="node">
           <div class="node-icon">📈</div>
-          <div class="node-name">price_monitor</div>
+          <div class="node-name">Monitor de Precios</div>
           <div class="node-desc">Forecasting de precios<br>aceite de palma</div>
           <div class="node-pills">
             <span class="pill pill-green">Sonnet 4.6</span>
-            <span class="pill pill-blue" id="calls-price_monitor">0 calls</span>
+            <span class="pill pill-blue" id="calls-price_monitor">0 consultas</span>
           </div>
         </div>
       </div>
@@ -384,11 +384,11 @@ def dashboard():
         <div class="conn-stem"></div>
         <div class="node">
           <div class="node-icon">📦</div>
-          <div class="node-name">demand_monitor</div>
+          <div class="node-name">Monitor de Demanda</div>
           <div class="node-desc">Forecasting de demanda<br>y ventas</div>
           <div class="node-pills">
             <span class="pill pill-green">Sonnet 4.6</span>
-            <span class="pill pill-blue" id="calls-demand_monitor">0 calls</span>
+            <span class="pill pill-blue" id="calls-demand_monitor">0 consultas</span>
           </div>
         </div>
       </div>
@@ -396,11 +396,11 @@ def dashboard():
         <div class="conn-stem"></div>
         <div class="node">
           <div class="node-icon">🔬</div>
-          <div class="node-name">agent_lab</div>
+          <div class="node-name">Laboratorio de Agentes</div>
           <div class="node-desc">Meta-agente de mejora<br>continua del sistema</div>
           <div class="node-pills">
             <span class="pill pill-green">Sonnet 4.6</span>
-            <span class="pill pill-blue" id="calls-agent_lab">0 calls</span>
+            <span class="pill pill-blue" id="calls-agent_lab">0 consultas</span>
           </div>
         </div>
       </div>
@@ -428,19 +428,19 @@ def dashboard():
 
     <!-- Pipeline -->
     <div class="pipeline-wrap">
-      <div class="section-label" style="margin-top:0">Pipeline</div>
+      <div class="section-label" style="margin-top:0">Flujo de Procesamiento</div>
       <div class="pipeline">
-        <div class="pipe-step on">Telegram Webhook</div><div class="pipe-arrow">›</div>
-        <div class="pipe-step on">Orchestrator</div><div class="pipe-arrow">›</div>
+        <div class="pipe-step on">Webhook Telegram</div><div class="pipe-arrow">›</div>
+        <div class="pipe-step on">Orquestador</div><div class="pipe-arrow">›</div>
         <div class="pipe-step on">Especialista</div><div class="pipe-arrow">›</div>
         <div class="pipe-step on">Supabase</div><div class="pipe-arrow">›</div>
-        <div class="pipe-step on">Anthropic API</div><div class="pipe-arrow">›</div>
+        <div class="pipe-step on">API Anthropic</div><div class="pipe-arrow">›</div>
         <div class="pipe-step on">Respuesta Telegram</div>
       </div>
       <div class="pipeline" style="margin-top:8px">
-        <div class="pipe-step on">GitHub Actions Cron</div><div class="pipe-arrow">›</div>
-        <div class="pipe-step on">Research Pipeline</div><div class="pipe-arrow">›</div>
-        <div class="pipe-step on">Agent Lab</div><div class="pipe-arrow">›</div>
+        <div class="pipe-step on">Cron GitHub Actions</div><div class="pipe-arrow">›</div>
+        <div class="pipe-step on">Pipeline de Investigación</div><div class="pipe-arrow">›</div>
+        <div class="pipe-step on">Lab. de Agentes</div><div class="pipe-arrow">›</div>
         <div class="pipe-step soon">Auto-mejora</div>
       </div>
     </div>
@@ -466,9 +466,14 @@ async function refresh() {
     const d = await res.json();
 
     // Actualizar call counts en el árbol
-    d.agents.forEach(a => {
+    const specialists = d.agents.filter(a => a.name !== 'orchestrator');
+    const totalMsgs = specialists.reduce((sum, a) => sum + a.calls, 0);
+    const orchEl = document.getElementById('calls-orchestrator');
+    if (orchEl) orchEl.textContent = totalMsgs + ' mensajes';
+
+    specialists.forEach(a => {
       const el = document.getElementById('calls-' + a.name);
-      if (el) el.textContent = a.calls + ' calls';
+      if (el) el.textContent = a.calls + ' consultas';
     });
 
     // Estado de datos

@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 WEBHOOK_URL = os.environ.get("TELEGRAM_WEBHOOK_URL", "")
+ADMIN_USER_ID = int(os.environ.get("ADMIN_USER_ID", "0"))
 
 
 class TelegramBot:
@@ -159,6 +160,8 @@ class TelegramBot:
             return "\n".join(lines)
 
         elif cmd == "/pending":
+            if not self._is_admin(user_id):
+                return "Este comando es solo para administradores."
             return await self._get_pending_recommendations()
 
         elif cmd == "/reset":
@@ -166,14 +169,21 @@ class TelegramBot:
             return "Historial de conversación limpiado. ¿En qué puedo ayudarte?"
 
         elif cmd.startswith("/approve_"):
+            if not self._is_admin(user_id):
+                return "Este comando es solo para administradores."
             rec_id = cmd.replace("/approve_", "")
             return await self._approve_recommendation(rec_id)
 
         elif cmd.startswith("/reject_"):
+            if not self._is_admin(user_id):
+                return "Este comando es solo para administradores."
             rec_id = cmd.replace("/reject_", "")
             return await self._reject_recommendation(rec_id)
 
         return f"Comando '{cmd}' no reconocido. Usa /help para ver los disponibles."
+
+    def _is_admin(self, user_id: int) -> bool:
+        return ADMIN_USER_ID != 0 and user_id == ADMIN_USER_ID
 
     async def _get_pending_recommendations(self) -> str:
         """Muestra las recomendaciones proactivas pendientes de aprobación."""

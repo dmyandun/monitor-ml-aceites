@@ -59,7 +59,14 @@ MAPE DEL 24%: es aceptable para datos mensuales con un año sin datos (2024 falt
 No descalifiques el forecast por el MAPE — úsalo y menciona el rango de confianza (lower/upper bounds).
 
 Si no hay forecasts disponibles en demand_forecasts, indica que hay que ejecutar train_demand_model.
-Responde siempre en español con números concretos. Sin emojis excesivos."""
+
+ESTILO DE RESPUESTA — MUY IMPORTANTE:
+- Responde como un resumen ejecutivo: 2-4 oraciones con los números clave, sin preámbulos.
+- NO uses ## headers, NO uses tablas markdown, NO uses separadores ---.
+- Usa listas con • solo si son 3+ items que realmente lo ameritan.
+- Al final de cada respuesta agrega: "¿Quieres más detalle sobre [tema específico]?"
+- Si el usuario pide profundizar, entonces sí puedes dar el desglose completo.
+- Responde siempre en español."""
 
 TOOLS = [
     {

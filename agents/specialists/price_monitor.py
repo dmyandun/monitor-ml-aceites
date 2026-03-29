@@ -45,7 +45,13 @@ Factores clave que mueven el precio del aceite de palma:
 - Política: mandatos de biocombustibles, restricciones de exportación
 - Clima: El Niño/La Niña afecta cosechas de palma 12-18 meses después
 
-Cuando reportes métricas, sé específico con números. Responde siempre en español."""
+ESTILO DE RESPUESTA — MUY IMPORTANTE:
+- Responde como un resumen ejecutivo: 2-4 oraciones con los números clave, sin preámbulos.
+- NO uses ## headers, NO uses tablas markdown, NO uses separadores ---.
+- Usa listas con • solo si son 3+ items que realmente lo ameritan.
+- Al final de cada respuesta agrega: "¿Quieres más detalle sobre [tema específico]?"
+- Si el usuario pide profundizar, entonces sí puedes dar el desglose completo.
+- Responde siempre en español."""
 
 # Definiciones de herramientas
 TOOLS = [
