@@ -1,0 +1,13 @@
+# requirements-cron.txt
+# -------------------
+# Dependencias del pipeline diario de research (GitHub Actions cron).
+# NO se instalan en HF Space — el Space solo lee de Supabase.
+#
+# Uso en GitHub Actions:
+#   pip install -r requirements-cron.txt
+#
+# Incluye requirements.txt base + librerías de scraping/research
+-r requirements.txt
+
+# Scraping de noticias de mercado (research_pipeline.py)
+duckduckgo-search>=6.0.0
