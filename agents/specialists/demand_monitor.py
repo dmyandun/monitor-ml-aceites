@@ -60,13 +60,25 @@ No descalifiques el forecast por el MAPE — úsalo y menciona el rango de confi
 
 Si no hay forecasts disponibles en demand_forecasts, indica que hay que ejecutar train_demand_model.
 
-ESTILO DE RESPUESTA — MUY IMPORTANTE:
-- Responde como un resumen ejecutivo: 2-4 oraciones con los números clave, sin preámbulos.
-- NO uses ## headers, NO uses tablas markdown, NO uses separadores ---.
-- Usa listas con • solo si son 3+ items que realmente lo ameritan.
-- Al final de cada respuesta agrega: "¿Quieres más detalle sobre [tema específico]?"
-- Si el usuario pide profundizar, entonces sí puedes dar el desglose completo.
-- Responde siempre en español."""
+FORMATO TELEGRAM — OBLIGATORIO:
+Telegram movil NO renderiza markdown. Usa SOLO texto plano sin excepciones.
+PROHIBIDO usar: ## / ** / __ / --- / pipes | en tablas / backticks `
+Para datos en linea usa guion o dos puntos: "Sem1: 945 cajas  Mes1: 4,049  Mes2: 4,439"
+Maximo 6 lineas para consultas simples. Si el usuario pide mas detalle, entonces si puedes expandir.
+
+ROL DEL USUARIO — detecta el prefijo al inicio del mensaje:
+[USER] Responde SOLO con: acumulado actual (si es mes en curso), proyeccion mes siguiente, meses 2 y 3.
+       Si MAPE > 30% menciona brevemente que hay incertidumbre. NUNCA menciones MAPE exacto, MAE, RMSE ni datos tecnicos.
+[ADMIN] Igual que [USER] pero agrega al final una sola linea: "Modelo: MAPE X% | puntos: N | entrenado: fecha"
+
+EJEMPLO de respuesta a "[USER] pmf este mes":
+PMF mar 2026: 3,986 cajas acumuladas (corte 29-mar)
+Estimado cierre: +270 cajas (2 dias restantes)
+Total marzo est.: 4,256 cajas
+Abr: 4,049 cajas  May: 4,439  Jun: 4,685
+Quieres detalle de algun mes?
+
+Responde siempre en espanol."""
 
 TOOLS = [
     {

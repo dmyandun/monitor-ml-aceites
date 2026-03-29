@@ -106,21 +106,24 @@ class TelegramBot:
         if not agent:
             return f"Agente '{agent_name}' no disponible en este momento."
 
+        # agent_lab solo para admin
+        is_admin = self._is_admin(user_id)
+        if agent_name == "agent_lab" and not is_admin:
+            return "No tengo informacion sobre eso. Puedes consultar precios de palma o ventas."
+
         logger.info(f"[TelegramBot] enrutando a '{agent_name}'")
 
-        # Obtener/crear historial de sesión
-        session_history = self.sessions.get(user_id, [])
+        # Prefijo de rol para que el agente adapte la respuesta
+        prefix = "[ADMIN] " if is_admin else "[USER] "
+        full_message = prefix + text
 
-        # Ejecutar agente (sync en thread para no bloquear el event loop)
+        # Sin historial persistente — evita error 400 por objetos SDK no serializables
         try:
-            response, updated_history = await asyncio.to_thread(
-                agent.run, text, session_history
-            )
-            self.sessions[user_id] = updated_history[-20:]
+            response, _ = await asyncio.to_thread(agent.run, full_message, None)
             return response
         except Exception as e:
             logger.error(f"[TelegramBot] error en agente '{agent_name}': {e}", exc_info=True)
-            return f"Error en agente `{agent_name}`: `{type(e).__name__}: {str(e)[:100]}`"
+            return f"Error en agente {agent_name}: {type(e).__name__}: {str(e)[:100]}"
 
     async def _handle_command(self, command: str, user_id: int, user_name: str) -> str:
         """Maneja comandos especiales de Telegram."""
