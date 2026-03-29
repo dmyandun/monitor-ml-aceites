@@ -161,23 +161,33 @@ async def score_relevance(title: str, summary: str) -> float:
 
 
 COMMODITIES = [
-    {"name": "palm_oil",     "symbol": "CPO",  "queries": ["crude palm oil CPO price USD metric ton today", "palm oil futures price USD today"]},
-    {"name": "pko",          "symbol": "PKO",  "queries": ["palm kernel oil PKO price USD metric ton today"]},
-    {"name": "sunflower_oil","symbol": "SFO",  "queries": ["sunflower oil price USD metric ton today 2026"]},
-    {"name": "soybean_oil",  "symbol": "SBO",  "queries": ["soybean oil price USD metric ton today 2026"]},
-    {"name": "corn_oil",     "symbol": "CNO",  "queries": ["corn oil price USD metric ton today 2026"]},
-    {"name": "achiote",      "symbol": "ANN",  "queries": ["annatto achiote price USD kg today", "bixin annatto extract price USD 2026"]},
+    # USD/MT — rango esperado 400-2500
+    {"name": "palm_oil",     "symbol": "CPO",  "unit": "USD/MT", "range": (400, 2500),
+     "queries": ["crude palm oil CPO price USD metric ton today", "palm oil futures price USD today"]},
+    {"name": "pko",          "symbol": "PKO",  "unit": "USD/MT", "range": (500, 3000),
+     "queries": ["palm kernel oil PKO price USD metric ton today", "palm kernel oil price USD ton"]},
+    {"name": "sunflower_oil","symbol": "SFO",  "unit": "USD/MT", "range": (800, 3000),
+     "queries": ["sunflower oil price USD metric ton today", "Ukraine sunflower oil FOB USD ton"]},
+    {"name": "soybean_oil",  "symbol": "SBO",  "unit": "USD/MT", "range": (800, 2500),
+     "queries": ["soybean oil price USD metric ton today", "soy oil Chicago futures USD ton"]},
+    {"name": "corn_oil",     "symbol": "CNO",  "unit": "USD/MT", "range": (800, 3000),
+     "queries": ["corn oil price USD metric ton today", "maize oil price USD ton"]},
+    # USD/kg — rango esperado 5-80
+    {"name": "achiote",      "symbol": "ANN",  "unit": "USD/kg", "range": (5, 80),
+     "queries": ["annatto extract bixin price USD kg", "annatto oleoresin price USD kilogram"]},
 ]
 
 import re as _re
 
-def _extract_price_from_text(text: str, expected_range: tuple = (100, 3000)) -> float | None:
-    """Extrae el primer precio USD/MT encontrado en un texto de búsqueda."""
+def _extract_price_from_text(text: str, expected_range: tuple) -> float | None:
+    """Extrae el primer precio numerico dentro del rango esperado."""
+    # Patrones de mayor a menor especificidad
     patterns = [
-        r'\$\s*([\d,]+(?:\.\d+)?)\s*(?:per\s+)?(?:metric\s+)?(?:ton|MT|tonne)',
-        r'([\d,]+(?:\.\d+)?)\s*(?:USD|US\$)\s*(?:per\s+)?(?:metric\s+)?(?:ton|MT)',
-        r'price[^$\d]*([\d,]+(?:\.\d+)?)',
-        r'([\d,]+\.\d+)',
+        r'\$\s*([\d,]+(?:\.\d+)?)\s*(?:per\s+)?(?:metric\s+)?(?:ton|MT|tonne|kg)',
+        r'([\d,]+(?:\.\d+)?)\s*(?:USD|US\$)\s*(?:per\s+)?(?:metric\s+)?(?:ton|MT|kg)',
+        r'price[^$\d]{0,20}\$([\d,]+(?:\.\d+)?)',
+        r'([\d,]+\.\d{1,2})',   # numeros con decimales (e.g. 1,330.00 o 1138.5)
+        r'(?<!\d)(1[,.]?\d{3})(?!\d)',  # numeros de 4 digitos tipo 1330 o 1,330
     ]
     for pattern in patterns:
         matches = _re.findall(pattern, text, _re.IGNORECASE)
@@ -213,7 +223,7 @@ async def fetch_commodity_prices(dry_run: bool = False) -> str:
                     snippets = list(ddgs.text(query, max_results=4))
                     for s in snippets:
                         text = s.get("title", "") + " " + s.get("body", "")
-                        price = _extract_price_from_text(text)
+                        price = _extract_price_from_text(text, commodity["range"])
                         if price:
                             source_snippet = s.get("title", "")[:60]
                             break
@@ -222,7 +232,8 @@ async def fetch_commodity_prices(dry_run: bool = False) -> str:
             continue
 
         if price:
-            results_log.append(f"{commodity['symbol']}: ${price}/MT")
+            unit_short = commodity["unit"].replace("USD/", "")
+            results_log.append(f"{commodity['symbol']}: ${price}/{unit_short}")
             if not dry_run:
                 try:
                     from database.supabase_client import get_supabase
@@ -233,7 +244,7 @@ async def fetch_commodity_prices(dry_run: bool = False) -> str:
                         "commodity": commodity["name"],
                         "source": "ddgs",
                         "currency": "USD",
-                        "unit": "USD/MT",
+                        "unit": commodity["unit"],
                     }, on_conflict="date,commodity").execute()
                 except Exception as e:
                     logger.warning(f"  Error guardando {commodity['name']}: {e}")
