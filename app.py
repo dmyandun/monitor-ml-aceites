@@ -294,13 +294,29 @@ def dashboard():
     .empty { color: #2a2a4a; font-size: 0.82rem; padding: 10px 0; text-align: center; }
 
     /* ── Pipeline ── */
-    .pipeline-wrap { margin-top: 32px; }
+    .pipeline-wrap { margin-top: 20px; }
     .pipeline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
     .pipe-step { background: #13131e; border: 1px solid #1e1e30; border-radius: 8px;
                  padding: 5px 11px; font-size: 0.72rem; color: #3a3a6a; }
     .pipe-step.on { border-color: #1a4a2e; color: #68d391; background: #0a1a10; }
     .pipe-step.soon { border-color: #4a3800; color: #f6c90e; background: #1a1400; }
     .pipe-arrow { color: #1e1e30; font-size: 0.8rem; }
+
+    /* ── Panel desplegable ── */
+    .panel-toggle {
+      display: flex; align-items: center; gap: 8px; margin-top: 32px;
+      cursor: pointer; user-select: none; width: fit-content;
+    }
+    .panel-toggle-label {
+      font-size: 0.68rem; font-weight: 700; color: #3a3a6a;
+      text-transform: uppercase; letter-spacing: .12em;
+    }
+    .panel-toggle-icon {
+      font-size: 0.72rem; color: #3a3a6a; transition: transform .25s;
+    }
+    .panel-toggle-icon.open { transform: rotate(180deg); }
+    .panel-body { display: none; }
+    .panel-body.open { display: block; }
 
     /* ── Footer ── */
     .footer { margin-top: 36px; font-size: 0.68rem; color: #22223a; }
@@ -312,12 +328,12 @@ def dashboard():
 
 <header>
   <div class="header-brand">
-    <span style="font-size:1.4rem">🫒</span>
+    <span style="font-size:1.4rem">🤖</span>
     <div>
-      <h1>Monitor ML — Aceites Comestibles</h1>
+      <h1>Monitor ML DDMRP</h1>
       <div style="font-size:.68rem;color:#3a3a6a;margin-top:2px">Ecuador · Interfaz principal: Telegram bot</div>
     </div>
-    <span class="tag">Fase 1</span>
+    <span class="tag">Fase 2</span>
   </div>
   <div style="text-align:right">
     <div class="status-pill"><span class="dot"></span>EN LÍNEA</div>
@@ -391,34 +407,42 @@ def dashboard():
     </div>
   </div>
 
-  <!-- Cards de datos -->
-  <div class="cards-row">
-    <div class="card">
-      <div class="card-title">Estado de datos</div>
-      <div id="data-status"><div class="empty">Cargando...</div></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Recomendaciones pendientes</div>
-      <div id="recs-card"><div class="empty">Cargando...</div></div>
-    </div>
+  <!-- Panel desplegable: datos + pipeline -->
+  <div class="panel-toggle" onclick="togglePanel()">
+    <span class="panel-toggle-label">Estado del sistema</span>
+    <span class="panel-toggle-icon" id="panel-icon">▼</span>
   </div>
 
-  <!-- Pipeline -->
-  <div class="pipeline-wrap">
-    <div class="section-label" style="margin-top:0">Pipeline</div>
-    <div class="pipeline">
-      <div class="pipe-step on">Telegram Webhook</div><div class="pipe-arrow">›</div>
-      <div class="pipe-step on">Orchestrator</div><div class="pipe-arrow">›</div>
-      <div class="pipe-step on">Especialista</div><div class="pipe-arrow">›</div>
-      <div class="pipe-step on">Supabase</div><div class="pipe-arrow">›</div>
-      <div class="pipe-step on">Anthropic API</div><div class="pipe-arrow">›</div>
-      <div class="pipe-step on">Respuesta Telegram</div>
+  <div class="panel-body" id="panel-body">
+    <!-- Cards de datos -->
+    <div class="cards-row">
+      <div class="card">
+        <div class="card-title">Estado de datos</div>
+        <div id="data-status"><div class="empty">Cargando...</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Recomendaciones pendientes</div>
+        <div id="recs-card"><div class="empty">Cargando...</div></div>
+      </div>
     </div>
-    <div class="pipeline" style="margin-top:8px">
-      <div class="pipe-step on">GitHub Actions Cron</div><div class="pipe-arrow">›</div>
-      <div class="pipe-step on">Research Pipeline</div><div class="pipe-arrow">›</div>
-      <div class="pipe-step on">Agent Lab</div><div class="pipe-arrow">›</div>
-      <div class="pipe-step soon">Auto-mejora</div>
+
+    <!-- Pipeline -->
+    <div class="pipeline-wrap">
+      <div class="section-label" style="margin-top:0">Pipeline</div>
+      <div class="pipeline">
+        <div class="pipe-step on">Telegram Webhook</div><div class="pipe-arrow">›</div>
+        <div class="pipe-step on">Orchestrator</div><div class="pipe-arrow">›</div>
+        <div class="pipe-step on">Especialista</div><div class="pipe-arrow">›</div>
+        <div class="pipe-step on">Supabase</div><div class="pipe-arrow">›</div>
+        <div class="pipe-step on">Anthropic API</div><div class="pipe-arrow">›</div>
+        <div class="pipe-step on">Respuesta Telegram</div>
+      </div>
+      <div class="pipeline" style="margin-top:8px">
+        <div class="pipe-step on">GitHub Actions Cron</div><div class="pipe-arrow">›</div>
+        <div class="pipe-step on">Research Pipeline</div><div class="pipe-arrow">›</div>
+        <div class="pipe-step on">Agent Lab</div><div class="pipe-arrow">›</div>
+        <div class="pipe-step soon">Auto-mejora</div>
+      </div>
     </div>
   </div>
 
@@ -429,6 +453,13 @@ def dashboard():
 </main>
 
 <script>
+function togglePanel() {
+  const body = document.getElementById('panel-body');
+  const icon = document.getElementById('panel-icon');
+  const open = body.classList.toggle('open');
+  icon.classList.toggle('open', open);
+}
+
 async function refresh() {
   try {
     const res = await fetch('/api/status');
@@ -449,7 +480,7 @@ async function refresh() {
       <div class="metric"><span>Findings research</span>
         <span class="metric-val">${d.research_count} registros</span></div>
       <div class="metric"><span>Ventas (Excel)</span>
-        <span class="badge badge-yellow">Fase 2</span></div>`;
+        <span class="badge badge-green">Activo</span></div>`;
 
     // Recomendaciones
     document.getElementById('recs-card').innerHTML = d.pending_recommendations.length
